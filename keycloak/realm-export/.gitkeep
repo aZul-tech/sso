@@ -1,0 +1,2 @@
+# Realm config is applied by keycloak/scripts/configure-realm.sh (source of truth).
+# Full realm JSON dumps are git-ignored (they contain signing keys + secrets).

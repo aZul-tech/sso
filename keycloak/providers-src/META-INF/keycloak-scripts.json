@@ -1,0 +1,9 @@
+{
+  "authenticators": [
+    {
+      "name": "Azul Tech Email Domain Guard",
+      "fileName": "domain-check.js",
+      "description": "Denies brokered (Zoho) logins whose verified email is not on an allowed Azul Tech domain."
+    }
+  ]
+}

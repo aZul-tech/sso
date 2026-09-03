@@ -1,0 +1,30 @@
+# Production overrides for the Keycloak stack.
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Requires in .env:
+#   KC_HOSTNAME_URL=https://sso.azultech.rw
+#   KC_HOSTNAME_ADMIN_URL=https://sso.azultech.rw
+#   KC_HOSTNAME_STRICT=true
+#   strong POSTGRES_PASSWORD / KEYCLOAK_ADMIN_PASSWORD
+#
+# nginx (host or another container) terminates TLS and proxies :443 -> keycloak:8080
+# with X-Forwarded-* headers. See DEPLOYMENT.md.
+
+services:
+  keycloak:
+    # Production mode: no dev shortcuts, optimized startup.
+    command: start --optimized
+    environment:
+      KC_PROXY: edge
+      KC_HOSTNAME_STRICT: "true"
+      KC_HTTP_ENABLED: "true"
+    ports:
+      - "127.0.0.1:8081:8080"   # only reachable by the local reverse proxy
+    build:
+      # A tiny build step so `start --optimized` has a pre-built image incl. the
+      # scripts feature + the domain-guard provider.
+      context: ./keycloak
+      dockerfile: Dockerfile
+
+  postgres:
+    ports: []   # never expose the DB

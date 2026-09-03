@@ -1,0 +1,18 @@
+# Secrets & local config
+.env
+.env.*
+!.env.example
+
+# Keycloak runtime data
+keycloak/config/
+keycloak/*.log
+
+# Full realm dumps contain client secrets + user password hashes.
+# The reproducible source of truth is keycloak/scripts/configure-realm.sh
+keycloak/realm-export/*.json
+!keycloak/realm-export/.gitkeep
+keycloak/providers/*.jar
+
+# OS
+.DS_Store
+Thumbs.db

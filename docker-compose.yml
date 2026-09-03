@@ -1,0 +1,64 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: azul-tech-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-keycloak}
+      POSTGRES_USER: ${POSTGRES_USER:-keycloak}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - keycloak-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-keycloak}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:20.0.5
+    container_name: azul-tech-keycloak
+    restart: unless-stopped
+    command: start-dev
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-keycloak}
+      KC_DB_USERNAME: ${POSTGRES_USER:-keycloak}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KC_HOSTNAME_URL: ${KC_HOSTNAME_URL:-http://localhost:8081}
+      KC_HOSTNAME_ADMIN_URL: ${KC_HOSTNAME_ADMIN_URL:-http://localhost:8081}
+      KC_HOSTNAME_STRICT: ${KC_HOSTNAME_STRICT:-false}
+      KC_HTTP_ENABLED: true
+      KC_HOSTNAME_STRICT_HTTPS: ${KC_HOSTNAME_STRICT_HTTPS:-false}
+      KC_PROXY: none
+      KC_HEALTH_ENABLED: true
+      KC_METRICS_ENABLED: true
+      # 'scripts' enables the deployed script authenticator (Azul Tech Email Domain Guard)
+      KC_FEATURES: scripts
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_LOG_LEVEL: ${KC_LOG_LEVEL:-INFO}
+      JAVA_OPTS: "-Xms512m -Xmx1024m -XX:+UseG1GC"
+    ports:
+      - "${KC_HTTP_PORT:-8081}:8080"
+    volumes:
+      - ./keycloak/realm-export:/opt/keycloak/data/import
+      - ./keycloak/config:/opt/keycloak/data/config
+      - ./keycloak/providers:/opt/keycloak/providers
+      # Custom "azultech" login theme (deep navy / royal-blue background)
+      - ./keycloak/themes:/opt/keycloak/themes
+    networks:
+      - keycloak-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  keycloak-network:
+    driver: bridge

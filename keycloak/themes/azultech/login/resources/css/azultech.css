@@ -1,0 +1,113 @@
+/* ============================================================
+   Azul Tech SSO — login theme
+   Deep navy / royal-blue background, white card, blue accents.
+   Loaded after the stock Keycloak + PatternFly stylesheets, so
+   every rule here intentionally overrides the defaults.
+   ============================================================ */
+
+:root {
+  --azul-navy:        #0a1a3f;   /* deep navy   */
+  --azul-navy-2:      #0d2352;   /* navy mid    */
+  --azul-royal:       #1b3b93;   /* deep royal blue */
+  --azul-royal-hover: #24309a;
+  --azul-accent:      #3b6fe0;   /* brighter blue for focus / hover */
+}
+
+/* --- Page background -------------------------------------------------- */
+/* html.login-pf keeps a solid navy so there is no white flash on load;   */
+/* body carries the gradient + a soft royal-blue glow top-left.           */
+html.login-pf {
+  background-color: var(--azul-navy);
+}
+
+.login-pf body {
+  background: var(--azul-navy);
+  background-image:
+    radial-gradient(1100px 620px at 18% -12%, rgba(59, 111, 224, 0.38), transparent 60%),
+    linear-gradient(160deg, var(--azul-navy) 0%, var(--azul-navy-2) 45%, var(--azul-royal) 100%);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  background-size: cover;
+}
+
+/* --- Header (realm name / "Azul Tech") ------------------------------- */
+#kc-header,
+#kc-header-wrapper {
+  color: #ffffff;
+  letter-spacing: 0.4px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+/* --- Login card ---------------------------------------------------- */
+.card-pf {
+  border: none;
+  border-top: 4px solid var(--azul-royal);
+  border-radius: 10px;
+  box-shadow: 0 24px 60px -12px rgba(3, 10, 30, 0.65);
+}
+
+/* --- Primary button ("Sign In") ---------------------------------- */
+.btn-primary,
+#kc-login {
+  background: var(--azul-royal);
+  border-color: var(--azul-royal);
+}
+
+.btn-primary:hover,
+.btn-primary:focus,
+.btn-primary:active,
+.btn-primary:active:hover,
+#kc-login:hover {
+  background: var(--azul-royal-hover) !important;
+  border-color: var(--azul-royal-hover) !important;
+}
+
+/* --- Links (reset password, register, back to app) --------------- */
+a,
+#kc-registration a,
+#kc-info-wrapper a,
+#kc-form-options a {
+  color: var(--azul-royal);
+}
+
+a:hover,
+a:focus {
+  color: var(--azul-accent);
+}
+
+/* --- Text inputs: brand-blue focus ring -------------------------- */
+input[type="text"]:focus,
+input[type="password"]:focus,
+input[type="email"]:focus,
+.pf-c-form-control:focus,
+#kc-content input:focus {
+  border-color: var(--azul-accent);
+  box-shadow: 0 0 0 2px rgba(59, 111, 224, 0.25);
+  outline: none;
+}
+
+/* --- Identity-provider button ("Continue with Zoho") ------------ */
+#kc-social-providers a {
+  border: 1px solid var(--azul-royal);
+  color: var(--azul-royal);
+}
+
+#kc-social-providers a:hover {
+  background: var(--azul-royal);
+  color: #ffffff;
+}
+
+/* --- Anything sitting directly on the dark background ----------- */
+#kc-info,
+#kc-info-wrapper,
+#kc-info-wrapper *,
+.login-pf-page .login-pf-signup a,
+#kc-locale ul {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+#kc-info-wrapper a,
+.login-pf-page .login-pf-signup a {
+  color: #ffffff;
+  text-decoration: underline;
+}
