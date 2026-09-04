@@ -1,8 +1,10 @@
 # Login page branding — Azul Tech SSO
 
-The Keycloak login screen (the page employees see when they sign in through
-Zoho / into Lunchify) uses a custom theme called **`azultech`** instead of the
-stock Keycloak look.
+The Keycloak login screen (the page employees see when they sign in to
+Lunchify, or any other company app on this realm) uses a custom theme called
+**`azultech`** instead of the stock Keycloak look. Keycloak is the identity
+provider itself — this is the only login page staff see, there's no upstream
+redirect.
 
 ## What it changes
 
@@ -11,8 +13,7 @@ stock Keycloak look.
   background.
 - White login card with a royal-blue top accent and a deeper shadow so it lifts
   off the dark background.
-- "Sign In" button, links, input focus rings and the Zoho button all use the
-  Azul Tech blue.
+- "Sign In" button, links and input focus rings all use the Azul Tech blue.
 - The "Azul Tech" realm title is rendered white so it reads on the dark background.
 
 Only the **login** theme is overridden. Account console, admin console and email
@@ -31,13 +32,14 @@ The theme directory is mounted into the container at `/opt/keycloak/themes`
 
 ## How it's activated
 
-The realm's **Login theme** is set to `azultech`:
+The realm's **Login theme** is set to `azultech` by
+`keycloak/scripts/configure-realm.sh` (idempotent — the source of truth, see
+`docs/PHASE-1-REALM.md`). You can also set it by hand in the admin console:
+**Realm settings → Themes → Login theme → azultech**.
 
-- Fresh imports: `"loginTheme": "azultech"` in
-  `keycloak/realm-export/azul-tech-realm.json`.
-- Existing realms: `keycloak/scripts/configure-realm.sh` sets it (idempotent).
-  You can also set it by hand in the admin console:
-  **Realm settings → Themes → Login theme → azultech**.
+`keycloak/realm-export/azul-tech-realm.json` predates the current
+script-driven realm and isn't used by anything — the script builds the realm
+from an empty database, not from this file.
 
 ## Editing the colours
 

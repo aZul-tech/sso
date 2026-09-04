@@ -1,3 +1,3 @@
-name,email,group,lunchify_role
-Yvonne Uwantege,u.yvonne@azultech.rw,Admins,super-admin
-Ronald Musinguzi,ronard.musinguzi@azultech.rw,Employees,employee
+name,email,department,lunchify_group
+Yvonne Uwantege,u.yvonne@azultech.rw,Executive,SuperAdmins
+Ronald Musinguzi,ronard.musinguzi@azultech.rw,Engineering,Employees

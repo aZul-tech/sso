@@ -54,6 +54,18 @@ services:
       postgres:
         condition: service_healthy
 
+  # Dev-only SMTP catcher. Proves the "execute actions email" onboarding flow
+  # (no admin-set passwords, no temp passwords in messages) without needing
+  # real company mail credentials. Not used in production — see .env.example.
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    container_name: azul-tech-mailhog
+    restart: unless-stopped
+    ports:
+      - "8025:8025"   # web UI + API: http://localhost:8025
+    networks:
+      - keycloak-network
+
 volumes:
   postgres_data:
     driver: local

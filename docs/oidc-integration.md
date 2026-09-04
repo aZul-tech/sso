@@ -7,12 +7,12 @@ This guide covers integrating applications with Keycloak using OpenID Connect (O
 All applications use these Keycloak endpoints:
 
 ```
-Issuer URL:               https://YOUR-KEYCLOAK-DOMAIN/realms/azul-tech
-Authorization Endpoint:   https://YOUR-KEYCLOAK-DOMAIN/realms/azul-tech/protocol/openid-connect/auth
-Token Endpoint:           https://YOUR-KEYCLOAK-DOMAIN/realms/azul-tech/protocol/openid-connect/token
-UserInfo Endpoint:        https://YOUR-KEYCLOAK-DOMAIN/realms/azul-tech/protocol/openid-connect/userinfo
-JWKS URI:                 https://YOUR-KEYCLOAK-DOMAIN/realms/azul-tech/protocol/openid-connect/certs
-Logout Endpoint:          https://YOUR-KEYCLOAK-DOMAIN/realms/azul-tech/protocol/openid-connect/logout
+Issuer URL:               https://YOUR-KEYCLOAK-DOMAIN/realms/azultech
+Authorization Endpoint:   https://YOUR-KEYCLOAK-DOMAIN/realms/azultech/protocol/openid-connect/auth
+Token Endpoint:           https://YOUR-KEYCLOAK-DOMAIN/realms/azultech/protocol/openid-connect/token
+UserInfo Endpoint:        https://YOUR-KEYCLOAK-DOMAIN/realms/azultech/protocol/openid-connect/userinfo
+JWKS URI:                 https://YOUR-KEYCLOAK-DOMAIN/realms/azultech/protocol/openid-connect/certs
+Logout Endpoint:          https://YOUR-KEYCLOAK-DOMAIN/realms/azultech/protocol/openid-connect/logout
 ```
 
 ## Register a New Application
@@ -64,10 +64,10 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 passport.use(new OpenIDConnectStrategy({
-  issuer: 'https://YOUR-KEYCLOAK-DOMAIN/realms/azul-tech',
-  authorizationURL: 'https://YOUR-KEYCLOAK-DOMAIN/realms/azul-tech/protocol/openid-connect/auth',
-  tokenURL: 'https://YOUR-KEYCLOAK-DOMAIN/realms/azul-tech/protocol/openid-connect/token',
-  userInfoURL: 'https://YOUR-KEYCLOAK-DOMAIN/realms/azul-tech/protocol/openid-connect/userinfo',
+  issuer: 'https://YOUR-KEYCLOAK-DOMAIN/realms/azultech',
+  authorizationURL: 'https://YOUR-KEYCLOAK-DOMAIN/realms/azultech/protocol/openid-connect/auth',
+  tokenURL: 'https://YOUR-KEYCLOAK-DOMAIN/realms/azultech/protocol/openid-connect/token',
+  userInfoURL: 'https://YOUR-KEYCLOAK-DOMAIN/realms/azultech/protocol/openid-connect/userinfo',
   clientID: 'YOUR-CLIENT-ID',
   clientSecret: 'YOUR-CLIENT-SECRET',
   callbackURL: 'http://localhost:3000/callback',
@@ -121,7 +121,7 @@ oauth.register(
     name='keycloak',
     client_id='YOUR-CLIENT-ID',
     client_secret='YOUR-CLIENT-SECRET',
-    server_metadata_url='https://YOUR-KEYCLOAK-DOMAIN/realms/azul-tech/.well-known/openid-configuration',
+    server_metadata_url='https://YOUR-KEYCLOAK-DOMAIN/realms/azultech/.well-known/openid-configuration',
     client_kwargs={'scope': 'openid profile email'}
 )
 
@@ -189,7 +189,7 @@ Environment variables (.env.local):
 ```
 KEYCLOAK_CLIENT_ID=YOUR-CLIENT-ID
 KEYCLOAK_CLIENT_SECRET=YOUR-CLIENT-SECRET
-KEYCLOAK_ISSUER=https://YOUR-KEYCLOAK-DOMAIN/realms/azul-tech
+KEYCLOAK_ISSUER=https://YOUR-KEYCLOAK-DOMAIN/realms/azultech
 ```
 
 ## User Claims in Tokens
@@ -199,51 +199,51 @@ Keycloak includes these claims in the ID token:
 ```json
 {
   "sub": "user-uuid",
-  "email": "user@azul-tech.com",
+  "email": "user@azultech.rw",
   "email_verified": true,
   "name": "John Doe",
   "given_name": "John",
   "family_name": "Doe",
   "preferred_username": "john.doe",
-  "groups": ["hr-department", "user"]
+  "groups": ["/Departments/Engineering"],
+  "department": "Engineering",
+  "realm_access": { "roles": ["staff"] },
+  "resource_access": { "<your-client-id>": { "roles": ["<your-app-role>"] } }
 }
 ```
 
 ## Role-Based Access Control
 
-### Using Groups (Recommended)
-
-Groups are included in the token and can be used for authorization:
+Groups (`/Departments/*`) model the **organisation**, not app permissions —
+don't authorize on group membership. Authorize on **your own client's
+role claim** (`resource_access.<your-client-id>.roles`), assigned in
+Keycloak to the `/App-Access/<YourApp>/<Tier>` group that grants it. See
+`docs/PHASE-1-REALM.md` for the full model.
 
 ```javascript
-// Example middleware
-function requireGroup(group) {
+// Example middleware — checks YOUR app's own client role, not a group
+function requireClientRole(role) {
   return (req, res, next) => {
-    const userGroups = req.user.groups || [];
-    if (userGroups.includes(group)) {
-      return next();
-    }
+    const roles = req.user.resource_access?.['<your-client-id>']?.roles || [];
+    if (roles.includes(role)) return next();
     return res.status(403).send('Access denied');
   };
 }
 
-// Use in routes
-app.get('/hr', requireGroup('hr-department'), (req, res) => {
-  res.send('HR Portal');
+app.get('/admin', requireClientRole('super-admin'), (req, res) => {
+  res.send('Admin Panel');
 });
 ```
 
-### Using Roles
-
-Add role mappers in Keycloak and check roles in your application:
+Realm roles (`realm_access.roles`) exist only for genuinely cross-cutting
+concerns (`staff`, `contractor`, `platform-admin`) — not app-tier
+permissions:
 
 ```javascript
-function requireRole(role) {
+function requireRealmRole(role) {
   return (req, res, next) => {
     const userRoles = req.user.realm_access?.roles || [];
-    if (userRoles.includes(role)) {
-      return next();
-    }
+    if (userRoles.includes(role)) return next();
     return res.status(403).send('Access denied');
   };
 }
@@ -251,12 +251,14 @@ function requireRole(role) {
 
 ## Security Best Practices
 
-1. **Always validate tokens** on the server side
-2. **Use HTTPS** in production
-3. **Store secrets securely** (environment variables, secrets manager)
-4. **Implement logout** that terminates the Keycloak session
-5. **Handle token refresh** properly
-6. **Validate redirect URIs** to prevent open redirect attacks
+1. **Key your user records off the token's `sub` claim, never off email or
+   username** — people's names/emails change, `sub` doesn't.
+2. **Always validate tokens** on the server side.
+3. **Use HTTPS** in production.
+4. **Store secrets securely** (environment variables, secrets manager).
+5. **Implement logout** that terminates the Keycloak session.
+6. **Handle token refresh** properly.
+7. **Validate redirect URIs** to prevent open redirect attacks.
 
 ## Troubleshooting
 

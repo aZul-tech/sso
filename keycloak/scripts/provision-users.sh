@@ -1,22 +1,33 @@
 #!/usr/bin/env bash
 #
-# provision-users.sh — bulk-create local Keycloak users (Phase 1: Keycloak is
-# the IdP, so every person needs a Keycloak account).
+# provision-users.sh — create local Keycloak users the way Rene specified:
+# nobody sets a password on a user's behalf, ever. No temporary passwords in
+# messages, no admin ever knowing a user's credentials.
 #
-# No SMTP is configured yet, so this PRINTS each temporary password once —
-# relay it to the person out-of-band. They're forced to set their own password
-# (and, if in Admins, enrol MFA) on first login; nobody but them ever knows
-# the real one after that.
+# Each user is created with NO password and required actions
+# VERIFY_EMAIL + UPDATE_PASSWORD + CONFIGURE_TOTP + CONFIGURE_RECOVERY_AUTHN_CODES,
+# then Keycloak's "execute actions email" is triggered so the person sets
+# their own password (and enrols MFA + gets recovery codes) via a one-time
+# link, over the realm's configured SMTP. In dev that's MailHog
+# (http://localhost:8025) — nothing to relay by hand; in prod it's real mail.
+#
+# The list of people comes from Yvonne (the actual staff roster), NOT derived
+# from the Zoho mailbox list — mailboxes and people diverge (shared boxes,
+# aliases, dormant accounts).
 #
 # Usage:
 #   ./keycloak/scripts/provision-users.sh users.csv
 #
-# CSV columns (header row required): name,email,group,lunchify_role
-#   group          Admins | Employees   (realm group -> realm role)
-#   lunchify_role  super-admin | restaurant-manager | employee | (blank = skip)
+# CSV columns (header row required): name,email,department,lunchify_group
+#   department      free text -> /Departments/<department> (created if new),
+#                    also stored as the `department` user attribute (claim)
+#   lunchify_group   SuperAdmins | RestaurantManagers | Employees | (blank)
+#                    -> membership in /App-Access/Lunchify/<group>, which
+#                       carries the matching lunchify client role. Access is
+#                       granted by group membership, never role-on-user.
 #
 # Example row:
-#   Yvonne Uwantege,u.yvonne@azultech.rw,Admins,super-admin
+#   Yvonne Uwantege,u.yvonne@azultech.rw,Executive,SuperAdmins
 
 set -euo pipefail
 
@@ -27,39 +38,68 @@ CSV="${1:?usage: provision-users.sh <path-to-users.csv>}"
 # shellcheck disable=SC1091
 set -a; source "$ROOT_DIR/.env"; set +a
 
-REALM="${KC_REALM:-azul-tech}"
+REALM="${KC_REALM:-azultech}"
 CONTAINER="${KC_CONTAINER:-azul-tech-keycloak}"
 ADMIN="${KEYCLOAK_ADMIN:-admin}"
 ADMIN_PW="${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD in .env}"
-LID_CACHE=""
+ACTION_LIFESPAN="${ONBOARDING_LINK_LIFESPAN_SECONDS:-259200}"  # 72h to set up
 
 export MSYS_NO_PATHCONV=1
 kc() { docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh "$@"; }
 
 kc config credentials --server http://localhost:8080 --realm master --user "$ADMIN" --password "$ADMIN_PW" >/dev/null
 
-lunchify_id() {
-  [ -n "$LID_CACHE" ] && { echo "$LID_CACHE"; return; }
-  LID_CACHE=$(kc get clients -r "$REALM" -q clientId=lunchify --fields id --format csv --noquotes)
-  echo "$LID_CACHE"
+# execute-actions-email must be triggered against the PUBLIC-facing URL
+# (same host:port a browser uses), not the internal docker network address —
+# the resulting action-token bakes in whatever issuer it was minted against,
+# and Keycloak rejects the link if that doesn't match the realm's real
+# issuer. kcadm above talks to Keycloak over the internal Docker network
+# (port 8080), so calls that mint a link for a human to click go through curl
+# against the public URL instead.
+PUBLIC_KC_URL="${KC_HOSTNAME_URL:-http://localhost:8081}"
+PUBLIC_ADMIN_TOKEN=$(curl -s -X POST "$PUBLIC_KC_URL/realms/master/protocol/openid-connect/token" \
+  -d client_id=admin-cli -d "username=$ADMIN" -d "password=$ADMIN_PW" -d grant_type=password \
+  | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).access_token))')
+
+send_execute_actions_email() {
+  local uid="$1" resp code
+  # (avoid `-o /dev/null -w` — flaky in this shell; capture body+code together instead)
+  resp=$(curl -s -w $'\n%{http_code}' -X PUT \
+    "$PUBLIC_KC_URL/admin/realms/$REALM/users/$uid/execute-actions-email?client_id=lunchify&redirect_uri=$(node -e "console.log(encodeURIComponent(process.argv[1]))" "${LUNCHIFY_REDIRECT_BASE:-http://localhost:5173/}")&lifespan=$ACTION_LIFESPAN" \
+    -H "Authorization: Bearer $PUBLIC_ADMIN_TOKEN" -H 'Content-Type: application/json' \
+    -d '["VERIFY_EMAIL","UPDATE_PASSWORD","CONFIGURE_TOTP","CONFIGURE_RECOVERY_AUTHN_CODES"]' || true)
+  code=$(echo "$resp" | tail -1)
+  echo "$code"
 }
 
 group_id() {
   kc get groups -r "$REALM" -q "search=$1" --fields id,name --format csv --noquotes 2>/dev/null \
     | awk -F, -v n="$1" '$2==n{print $1}' | head -1
 }
-
-random_pw() {
-  # 16 chars, letters+digits+symbols — printed once, replaced on first login.
-  # (subshell + pipefail off: `head -c` closing the pipe early SIGPIPEs `tr`,
-  # which would otherwise trip `set -o pipefail` above and run past this into
-  # a predictable fallback suffix — a real bug caught while testing this script.)
-  ( set +o pipefail; tr -dc 'A-Za-z0-9!@#%^*' < /dev/urandom 2>/dev/null | head -c 16 )
+subgroup_id() {
+  local parent_id="$1" name="$2"
+  kc get "groups/$parent_id/children" -r "$REALM" --fields id,name --format csv --noquotes 2>/dev/null \
+    | awk -F, -v n="$name" '$2==n{print $1}' | head -1
+}
+ensure_department_group() {
+  local dept="$1"
+  local depts_gid; depts_gid=$(group_id Departments)
+  local gid; gid=$(subgroup_id "$depts_gid" "$dept")
+  if [ -z "$gid" ]; then
+    echo "   (new department group: /Departments/$dept)"
+    kc create "groups/$depts_gid/children" -r "$REALM" -s "name=$dept" >/dev/null
+    gid=$(subgroup_id "$depts_gid" "$dept")
+  fi
+  echo "$gid"
 }
 
-echo "email,temporary_password" > /tmp/provisioned-passwords.csv 2>/dev/null || true
+LUNCHIFY_ACCESS_GID=""
+lunchify_group_id() {
+  [ -n "$LUNCHIFY_ACCESS_GID" ] || LUNCHIFY_ACCESS_GID=$(subgroup_id "$(group_id App-Access)" Lunchify)
+  subgroup_id "$LUNCHIFY_ACCESS_GID" "$1"
+}
 
-tail -n +2 "$CSV" | while IFS=, read -r name email group lunchify_role; do
+tail -n +2 "$CSV" | while IFS=, read -r name email department lunchify_group; do
   [ -z "$email" ] && continue
   first="${name%% *}"; last="${name#* }"
   [ "$first" = "$last" ] && last=""
@@ -68,39 +108,37 @@ tail -n +2 "$CSV" | while IFS=, read -r name email group lunchify_role; do
   if [ -z "$uid" ]; then
     echo ">> creating $email"
     kc create users -r "$REALM" \
-      -s "username=$email" -s "email=$email" -s 'emailVerified=true' -s 'enabled=true' \
+      -s "username=$email" -s "email=$email" -s 'emailVerified=false' -s 'enabled=true' \
       -s "firstName=$first" -s "lastName=$last" \
-      -s 'requiredActions=["UPDATE_PASSWORD"]' >/dev/null
+      -s "attributes.department=[\"$department\"]" \
+      -s 'requiredActions=["VERIFY_EMAIL","UPDATE_PASSWORD","CONFIGURE_TOTP","CONFIGURE_RECOVERY_AUTHN_CODES"]' >/dev/null
     uid=$(kc get users -r "$REALM" -q "email=$email" --fields id --format csv --noquotes)
   else
-    echo ">> $email already exists — updating group/role only"
+    echo ">> $email already exists — updating department/group only, no password touched"
+    kc update "users/$uid" -r "$REALM" -s "attributes.department=[\"$department\"]" >/dev/null
   fi
 
-  PW=$(random_pw)
-  kc set-password -r "$REALM" --userid "$uid" --new-password "$PW" --temporary >/dev/null
-  echo "   temp password: $PW   (they set their own on first login)"
-  echo "$email,$PW" >> /tmp/provisioned-passwords.csv 2>/dev/null || true
+  if [ -n "$department" ]; then
+    dept_gid=$(ensure_department_group "$department")
+    kc update "users/$uid/groups/$dept_gid" -r "$REALM" -b '{}' >/dev/null 2>&1 || true
+  fi
 
-  if [ "$group" = "Admins" ]; then
-    gid=$(group_id Admins)
-    kc update "users/$uid/groups/$gid" -r "$REALM" -b '{}' >/dev/null 2>&1 || true
-    # Admins must enrol MFA before they can do anything else.
-    current=$(kc get "users/$uid" -r "$REALM" --fields requiredActions --format csv --noquotes 2>/dev/null || echo '')
-    if ! echo "$current" | grep -q CONFIGURE_TOTP; then
-      kc update "users/$uid" -r "$REALM" -s 'requiredActions=["UPDATE_PASSWORD","CONFIGURE_TOTP"]' >/dev/null
+  if [ -n "${lunchify_group:-}" ]; then
+    lg_gid=$(lunchify_group_id "$lunchify_group")
+    if [ -n "$lg_gid" ]; then
+      kc update "users/$uid/groups/$lg_gid" -r "$REALM" -b '{}' >/dev/null 2>&1 || true
+    else
+      echo "   !! unknown lunchify_group '$lunchify_group' — skipped (expected SuperAdmins|RestaurantManagers|Employees)"
     fi
-  elif [ "$group" = "Employees" ]; then
-    gid=$(group_id Employees)
-    kc update "users/$uid/groups/$gid" -r "$REALM" -b '{}' >/dev/null 2>&1 || true
   fi
 
-  if [ -n "${lunchify_role:-}" ]; then
-    LID=$(lunchify_id)
-    kc add-roles -r "$REALM" --uusername "$email" --cclientid lunchify --rolename "$lunchify_role" >/dev/null 2>&1 || true
+  echo "   department=$department  lunchify_group=${lunchify_group:-none}"
+  echo "   sending execute-actions email (VERIFY_EMAIL, UPDATE_PASSWORD, CONFIGURE_TOTP, CONFIGURE_RECOVERY_AUTHN_CODES)"
+  http_code=$(send_execute_actions_email "$uid")
+  if [ "$http_code" != "204" ]; then
+    echo "   !! execute-actions-email returned HTTP $http_code (expected 204) — check SMTP settings"
   fi
-
-  echo "   group=$group  lunchify_role=${lunchify_role:-none}"
 done
 
 echo
-echo "Done. Temporary passwords also saved to /tmp/provisioned-passwords.csv — relay them out-of-band and delete that file."
+echo "Done. Nobody set anyone's password. Each person got an email (dev: check http://localhost:8025) with a one-time link to set their own."

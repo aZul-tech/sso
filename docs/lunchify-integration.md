@@ -26,7 +26,7 @@ Lunchify is the reference integration. Repo: `C:\Users\HP\Downloads\lunch app`.
 `client/.env`:
 ```
 VITE_KEYCLOAK_URL=http://localhost:8081
-VITE_KEYCLOAK_REALM=azul-tech
+VITE_KEYCLOAK_REALM=azultech
 VITE_KEYCLOAK_CLIENT_ID=lunchify
 ```
 
@@ -40,8 +40,8 @@ VITE_KEYCLOAK_CLIENT_ID=lunchify
 
 `server/.env`:
 ```
-KEYCLOAK_ISSUER=http://localhost:8081/realms/azul-tech
-KEYCLOAK_JWKS_URI=http://localhost:8081/realms/azul-tech/protocol/openid-connect/certs
+KEYCLOAK_ISSUER=http://localhost:8081/realms/azultech
+KEYCLOAK_JWKS_URI=http://localhost:8081/realms/azultech/protocol/openid-connect/certs
 KEYCLOAK_ALLOWED_AZP=lunchify
 ALLOWED_EMAIL_DOMAIN=azultech.rw
 ```
