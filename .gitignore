@@ -13,6 +13,11 @@ keycloak/realm-export/*.json
 !keycloak/realm-export/.gitkeep
 keycloak/providers/*.jar
 
+# Real staff rosters contain PII (names + work emails) — never commit real
+# data here. Use pilot-users.example.csv (placeholder data) as the template.
+keycloak/scripts/*.csv
+!keycloak/scripts/pilot-users.example.csv
+
 # OS
 .DS_Store
 Thumbs.db

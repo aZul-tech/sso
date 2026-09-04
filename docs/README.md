@@ -36,7 +36,7 @@ cd sso
 cp .env.example .env                           # fill in passwords, SMTP, etc.
 docker compose up -d                           # Keycloak -> http://localhost:8081
 ./keycloak/scripts/configure-realm.sh          # wire the realm: roles, groups, lunchify client (idempotent)
-./keycloak/scripts/provision-users.sh keycloak/scripts/pilot-users.csv   # create real users, email them onboarding links
+./keycloak/scripts/provision-users.sh keycloak/scripts/pilot-users.example.csv   # create real users, email them onboarding links
 ```
 
 Admin console: `http://localhost:8081/admin` (`admin` / `KEYCLOAK_ADMIN_PASSWORD`).

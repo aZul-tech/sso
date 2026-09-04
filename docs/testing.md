@@ -14,7 +14,7 @@ curl -s http://localhost:8081/realms/azultech/.well-known/openid-configuration |
 #  -> "issuer":"http://localhost:8081/realms/azultech"
 
 ./keycloak/scripts/configure-realm.sh
-./keycloak/scripts/provision-users.sh keycloak/scripts/pilot-users.csv
+./keycloak/scripts/provision-users.sh keycloak/scripts/pilot-users.example.csv
 
 cd "../lunch app/server" && npm run dev         # :3001
 cd "../lunch app/client" && npm run dev         # :5173

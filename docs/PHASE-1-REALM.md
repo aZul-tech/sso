@@ -15,7 +15,7 @@ issuer URL and every client config, so it doesn't change later.
 cd sso
 docker compose down -v && docker compose up -d   # empty server
 ./keycloak/scripts/configure-realm.sh            # rebuilds the whole realm
-./keycloak/scripts/provision-users.sh keycloak/scripts/pilot-users.csv
+./keycloak/scripts/provision-users.sh keycloak/scripts/pilot-users.example.csv
 ```
 
 Verified 2026-09-04 on a from-scratch Keycloak **26.7.3** (upgraded from the
