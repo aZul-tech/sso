@@ -2,19 +2,24 @@
 #
 # configure-realm.sh — idempotent configuration of the "azul-tech" realm.
 #
-# This is the SOURCE OF TRUTH for how the realm is wired for SSO:
-#   - Zoho as an upstream OIDC identity provider (users keep their Zoho Mail password)
-#   - attribute mappers (email / given_name / family_name / username)
-#   - a "first broker login azul" flow whose first step is the Email Domain Guard
-#     script authenticator (denies any non-@azultech.rw account before a user is created)
-#   - the "lunchify" public SPA client (Authorization Code + PKCE S256)
+# ARCHITECTURE (revised): Keycloak is the identity provider. Users are local
+# to Keycloak — staff see ONLY Keycloak's own login page (the "azultech"
+# theme). Zoho is not consulted for authentication. (Phase 2 will make Zoho a
+# downstream SAML application of this realm — see docs/PHASE-1-REALM.md.)
 #
-# Requirements: the Keycloak container is up (docker compose up -d) and the
-# script authenticator JAR has been built (see build-providers.sh).
+# This script is the SOURCE OF TRUTH for the realm:
+#   - realm base settings (token/session lifetimes, brute-force, theme)
+#   - realm roles (admin, employee) + groups (Admins, Employees) that grant them
+#   - the "lunchify" public SPA client, with its own client roles
+#     (super-admin / restaurant-manager / employee) so a second app can define
+#     its own roles later without colliding with Lunchify's
+#   - a "groups" claim mapper so group membership rides in the token
+#
+# Exit test: `docker compose down -v && docker compose up -d && ./configure-realm.sh`
+# on an empty server reproduces this realm completely.
 #
 # Usage:  ./keycloak/scripts/configure-realm.sh
-# Reads:  ../../.env  (ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET, ZOHO_ACCOUNTS_HOST,
-#                      ALLOWED_EMAIL_DOMAINS, KEYCLOAK_ADMIN[_PASSWORD], KC_REALM)
+# Reads:  ../../.env  (KEYCLOAK_ADMIN[_PASSWORD], KC_REALM, LUNCHIFY_ORIGIN/REDIRECT)
 
 set -euo pipefail
 
@@ -28,10 +33,6 @@ REALM="${KC_REALM:-azul-tech}"
 CONTAINER="${KC_CONTAINER:-azul-tech-keycloak}"
 ADMIN="${KEYCLOAK_ADMIN:-admin}"
 ADMIN_PW="${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD in .env}"
-ZOHO_HOST="${ZOHO_ACCOUNTS_HOST:-accounts.zoho.com}"
-ZOHO_ID="${ZOHO_CLIENT_ID:?set ZOHO_CLIENT_ID in .env}"
-ZOHO_SECRET="${ZOHO_CLIENT_SECRET:?set ZOHO_CLIENT_SECRET in .env}"
-DOMAINS="${ALLOWED_EMAIL_DOMAINS:-azultech.rw}"
 SPA_REDIRECT="${LUNCHIFY_REDIRECT:-http://localhost:5173/*}"
 SPA_ORIGIN="${LUNCHIFY_ORIGIN:-http://localhost:5173}"
 
@@ -42,9 +43,7 @@ echo ">> authenticating"
 kc config credentials --server http://localhost:8080 --realm master --user "$ADMIN" --password "$ADMIN_PW" >/dev/null
 
 # ---------------------------------------------------------------------------
-# Realm — create it if this is a fresh Keycloak (prod `start --optimized` does
-# not auto-import). Base security posture lives here so there is no realm JSON
-# (with signing keys / secrets) to keep in git.
+# Realm
 # ---------------------------------------------------------------------------
 if kc get "realms/$REALM" >/dev/null 2>&1; then
   echo ">> realm '$REALM' exists"
@@ -56,127 +55,54 @@ else
     -s 'sslRequired=external' \
     -s 'registrationAllowed=false' -s 'resetPasswordAllowed=true' \
     -s 'loginWithEmailAllowed=true' -s 'duplicateEmailsAllowed=false' \
-    -s 'bruteForceProtected=true' \
+    -s 'bruteForceProtected=true' -s 'permanentLockout=false' \
+    -s 'failureFactor=5' -s 'maxFailureWaitSeconds=900' \
     -s 'accessTokenLifespan=300' \
     -s 'ssoSessionIdleTimeout=1800' -s 'ssoSessionMaxLifespan=36000' \
     -s 'internationalizationEnabled=true' -s 'supportedLocales=["en","sw"]' -s 'defaultLocale=en' >/dev/null
 fi
 
-echo ">> realm attribute: allowedEmailDomains=$DOMAINS"
-kc update "realms/$REALM" -s "attributes.allowedEmailDomains=$DOMAINS" >/dev/null
-
-echo ">> login theme: azultech (deep navy / royal-blue background)"
-kc update "realms/$REALM" -s 'loginTheme=azultech' >/dev/null
-# Also brand the admin-console sign-in (master realm) so every login page matches.
+echo ">> login theme: azultech (deep navy / royal-blue background — the only login page staff see)"
+kc update "realms/$REALM" -s 'loginTheme=azultech' -s 'accountTheme=azultech' >/dev/null 2>&1 || \
+  kc update "realms/$REALM" -s 'loginTheme=azultech' >/dev/null
 kc update "realms/master" -s 'loginTheme=azultech' >/dev/null 2>&1 || true
 
+echo ">> OTP policy: TOTP, 6 digits, 30s period"
+kc update "realms/$REALM" -s 'otpPolicyType=totp' -s 'otpPolicyAlgorithm=HmacSHA1' \
+  -s 'otpPolicyDigits=6' -s 'otpPolicyPeriod=30' -s 'otpPolicyLookAheadWindow=1' >/dev/null
+
 # ---------------------------------------------------------------------------
-# Purge artifacts of the deprecated setup-complete.ps1 (local password users,
-# placeholder app clients with wildcard redirect URIs, unused groups). The
-# current design has NO local users — everyone authenticates via Zoho — and
-# only real, registered apps get a client. Safe to re-run.
+# Realm roles — the cross-app tier. Per-app permission detail lives on each
+# client's OWN roles (see the lunchify client roles below), so a second app
+# never has to reuse or renegotiate Lunchify's role names.
 # ---------------------------------------------------------------------------
-echo ">> purging deprecated setup-complete.ps1 artifacts"
-for c in hrm-app finance-app projects-mel zoho-mail; do
-  cid=$(kc get clients -r "$REALM" -q "clientId=$c" --fields id --format csv --noquotes 2>/dev/null || true)
-  [ -n "$cid" ] && { kc delete "clients/$cid" -r "$REALM" >/dev/null 2>&1 && echo "   - removed client $c"; } || true
-done
-for u in ronald hr.user finance.user pm.user dev.user; do
-  uid=$(kc get users -r "$REALM" -q "username=$u" --fields id --format csv --noquotes 2>/dev/null | head -1 || true)
-  [ -n "$uid" ] && { kc delete "users/$uid" -r "$REALM" >/dev/null 2>&1 && echo "   - removed user $u"; } || true
-done
-for g in "Azul Tech Admins" "Development Team" "Finance Department" "HR Department" "Projects Team"; do
-  gid=$(kc get groups -r "$REALM" -q "search=$g" --fields id,name --format csv --noquotes 2>/dev/null | awk -F, -v n="$g" '$2==n{print $1}' | head -1 || true)
-  [ -n "$gid" ] && { kc delete "groups/$gid" -r "$REALM" >/dev/null 2>&1 && echo "   - removed group $g"; } || true
+echo ">> realm roles"
+for r in admin employee; do
+  kc get "roles/$r" -r "$REALM" >/dev/null 2>&1 || kc create roles -r "$REALM" -s "name=$r" >/dev/null
 done
 
 # ---------------------------------------------------------------------------
-# "first broker login azul" flow  +  Email Domain Guard  (idempotent)
-# Must exist BEFORE the Zoho IdP, which references it by alias.
+# Groups — org structure. Membership grants the realm role. Department-level
+# subgroups arrive with the HR system (Phase 3); kept flat for now.
 # ---------------------------------------------------------------------------
-if ! kc get authentication/flows -r "$REALM" 2>/dev/null | grep -q '"first broker login azul"'; then
-  echo ">> copying 'first broker login' -> 'first broker login azul'"
-  kc create "authentication/flows/first%20broker%20login/copy" -r "$REALM" -s 'newName=first broker login azul' >/dev/null
-fi
-
-FLOW="first%20broker%20login%20azul"
-GUARD_NAME="Azul Tech Email Domain Guard"
-
-# "<id>,<displayName>,<requirement>" per execution — CSV avoids the SIGPIPE /
-# multi-line-JSON parsing that made the old version abort under `set -o pipefail`.
-flow_execs() {
-  kc get "authentication/flows/$FLOW/executions" -r "$REALM" \
-     --fields id,displayName,requirement --format csv --noquotes 2>/dev/null || true
+echo ">> groups"
+ensure_group() {
+  local name="$1" role="$2"
+  local gid
+  gid=$(kc get groups -r "$REALM" -q "search=$name" --fields id,name --format csv --noquotes 2>/dev/null | awk -F, -v n="$name" '$2==n{print $1}' | head -1)
+  if [ -z "$gid" ]; then
+    kc create groups -r "$REALM" -s "name=$name" >/dev/null
+    gid=$(kc get groups -r "$REALM" -q "search=$name" --fields id,name --format csv --noquotes 2>/dev/null | awk -F, -v n="$name" '$2==n{print $1}' | head -1)
+  fi
+  kc add-roles -r "$REALM" --gid "$gid" --rolename "$role" >/dev/null 2>&1 || true
+  echo "$gid"
 }
-
-guard_ids=$(flow_execs | awk -F, -v n="$GUARD_NAME" '$2==n{print $1}')
-if [ -z "$guard_ids" ]; then
-  echo ">> adding Email Domain Guard execution"
-  kc create "authentication/flows/$FLOW/executions/execution" -r "$REALM" -s 'provider=script-domain-check.js' >/dev/null
-  guard_ids=$(flow_execs | awk -F, -v n="$GUARD_NAME" '$2==n{print $1}')
-fi
-
-# Keep the first guard execution; drop any duplicates from earlier partial runs.
-printf '%s\n' "$guard_ids" | tail -n +2 | while read -r dup; do
-  [ -n "$dup" ] && { kc delete "authentication/executions/$dup" -r "$REALM" >/dev/null 2>&1 \
-      && echo "   - removed duplicate guard execution"; } || true
-done
-
-GUARD_ID=$(printf '%s\n' "$guard_ids" | awk 'NF{print;exit}')
-REVIEW_ID=$(flow_execs | awk -F, '$2=="Review Profile"{print $1; exit}')
-
-# Guard REQUIRED + first; Review Profile DISABLED
-[ -n "$GUARD_ID" ]  && kc update "authentication/flows/$FLOW/executions" -r "$REALM" -b "{\"id\":\"$GUARD_ID\",\"requirement\":\"REQUIRED\"}" >/dev/null
-[ -n "$REVIEW_ID" ] && kc update "authentication/flows/$FLOW/executions" -r "$REALM" -b "{\"id\":\"$REVIEW_ID\",\"requirement\":\"DISABLED\"}" >/dev/null
-if [ -n "$GUARD_ID" ]; then
-  for _ in 1 2 3 4 5; do kc create "authentication/executions/$GUARD_ID/raise-priority" -r "$REALM" >/dev/null 2>&1 || true; done
-fi
+ADMINS_GID=$(ensure_group Admins admin)
+EMPLOYEES_GID=$(ensure_group Employees employee)
 
 # ---------------------------------------------------------------------------
-# Zoho identity provider
-# ---------------------------------------------------------------------------
-if kc get "identity-provider/instances/zoho" -r "$REALM" >/dev/null 2>&1; then
-  echo ">> updating Zoho identity provider"
-  ACTION=update; TARGET="identity-provider/instances/zoho"
-else
-  echo ">> creating Zoho identity provider"
-  ACTION=create; TARGET="identity-provider/instances"
-fi
-kc "$ACTION" "$TARGET" -r "$REALM" \
-  -s 'alias=zoho' -s 'providerId=oidc' -s 'displayName=Zoho' -s 'enabled=true' \
-  -s 'trustEmail=true' -s 'storeToken=false' -s 'updateProfileFirstLoginMode=off' \
-  -s 'firstBrokerLoginFlowAlias=first broker login azul' \
-  -s "config.clientId=$ZOHO_ID" \
-  -s "config.clientSecret=$ZOHO_SECRET" \
-  -s 'config.clientAuthMethod=client_secret_post' \
-  -s 'config.pkceEnabled=true' -s 'config.pkceMethod=S256' \
-  -s 'config.defaultScope=openid email profile' \
-  -s 'config.syncMode=FORCE' \
-  -s "config.authorizationUrl=https://$ZOHO_HOST/oauth/v2/auth" \
-  -s "config.tokenUrl=https://$ZOHO_HOST/oauth/v2/token" \
-  -s "config.userInfoUrl=https://$ZOHO_HOST/oauth/v2/userinfo" \
-  -s "config.jwksUrl=https://$ZOHO_HOST/oauth/v2/keys" \
-  -s "config.issuer=https://$ZOHO_HOST" \
-  -s 'config.useJwksUrl=true' -s 'config.validateSignature=true' >/dev/null
-
-echo ">> Zoho attribute mappers"
-# Read existing mappers once: lines of "<id> <name>"
-MAPPER_LIST=$(kc get "identity-provider/instances/zoho/mappers" -r "$REALM" --format csv --fields id,name --noquotes 2>/dev/null || true)
-ensure_mapper() {
-  local name="$1" mapper="$2"; shift 2
-  local existing
-  existing=$(printf '%s\n' "$MAPPER_LIST" | awk -F, -v n="$name" '$2==n{print $1}')
-  [ -n "$existing" ] && kc delete "identity-provider/instances/zoho/mappers/$existing" -r "$REALM" >/dev/null 2>&1 || true
-  kc create "identity-provider/instances/zoho/mappers" -r "$REALM" \
-    -s "name=$name" -s 'identityProviderAlias=zoho' -s "identityProviderMapper=$mapper" "$@" >/dev/null
-}
-ensure_mapper email     oidc-user-attribute-idp-mapper -s 'config.syncMode=INHERIT' -s 'config.claim=email'       -s 'config."user.attribute"=email'
-ensure_mapper firstName oidc-user-attribute-idp-mapper -s 'config.syncMode=INHERIT' -s 'config.claim=given_name'  -s 'config."user.attribute"=firstName'
-ensure_mapper lastName  oidc-user-attribute-idp-mapper -s 'config.syncMode=INHERIT' -s 'config.claim=family_name' -s 'config."user.attribute"=lastName'
-ensure_mapper username  oidc-username-idp-mapper       -s 'config.syncMode=INHERIT' -s 'config.template=${CLAIM.email}' -s 'config.target=LOCAL'
-
-# ---------------------------------------------------------------------------
-# lunchify SPA client
+# lunchify SPA client — its own client-role namespace so a second app (Taqwa,
+# Fikia, the HR system) defines its own roles without touching this one.
 # ---------------------------------------------------------------------------
 LID=$(kc get clients -r "$REALM" -q clientId=lunchify --fields id --format csv --noquotes 2>/dev/null || true)
 if [ -z "$LID" ]; then
@@ -195,4 +121,22 @@ kc update "clients/$LID" -r "$REALM" \
   -s "attributes.\"post.logout.redirect.uris\"=$SPA_REDIRECT" \
   -s 'attributes."pkce.code.challenge.method"=S256' >/dev/null
 
-echo ">> done. Realm '$REALM' configured."
+echo ">> lunchify client roles"
+for r in super-admin restaurant-manager employee; do
+  kc get "clients/$LID/roles/$r" -r "$REALM" >/dev/null 2>&1 || \
+    kc create "clients/$LID/roles" -r "$REALM" -s "name=$r" >/dev/null
+done
+
+echo ">> groups claim mapper on lunchify's dedicated scope"
+MAPPER_EXISTS=$(kc get "clients/$LID/protocol-mappers/models" -r "$REALM" --fields name --format csv --noquotes 2>/dev/null | grep -c '^groups$' || true)
+if [ "$MAPPER_EXISTS" = "0" ]; then
+  kc create "clients/$LID/protocol-mappers/models" -r "$REALM" \
+    -s 'name=groups' -s 'protocol=openid-connect' -s 'protocolMapper=oidc-group-membership-mapper' \
+    -s 'config."full.path"=false' -s 'config."id.token.claim"=true' -s 'config."access.token.claim"=true' \
+    -s 'config."userinfo.token.claim"=true' -s 'config."claim.name"=groups' >/dev/null
+fi
+
+echo ">> done. Realm '$REALM' configured. Groups: Admins=$ADMINS_GID Employees=$EMPLOYEES_GID"
+echo "   Token claim contract: email/given_name/family_name/preferred_username (standard),"
+echo "   groups (this realm's group mapper), realm_access.roles, resource_access.lunchify.roles"
+echo "   -> see docs/PHASE-1-REALM.md"

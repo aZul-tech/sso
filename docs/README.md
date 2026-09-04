@@ -1,12 +1,17 @@
 # Azul Tech SSO
 
-Single Sign-On for Azul Tech. Employees sign in to every company app with their
-**existing Zoho Mail account** (`@azultech.rw`) — no new password.
+> **Architecture changed 2026-09-04 — read `docs/PHASE-1-REALM.md` first.**
+> Keycloak is now the identity provider itself (local users, our own login
+> page, MFA enforced at login). The Zoho-broker design below is superseded;
+> Zoho becomes a *downstream* SAML app of this realm in Phase 2.
 
-## How it works
+Single Sign-On for Azul Tech. In the target end-state, employees sign in to
+every company app on Keycloak's own login page — no separate Zoho password.
 
-Keycloak is the SSO hub. It does **not** store passwords — it brokers
-authentication upstream to Zoho, then issues tokens to the apps.
+## How it worked (superseded — kept for history)
+
+Keycloak used to be a broker: it did **not** store passwords, it forwarded
+authentication upstream to Zoho, then issued tokens to the apps.
 
 ```
   Lunchify ┐

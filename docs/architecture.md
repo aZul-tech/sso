@@ -1,5 +1,10 @@
 # Azul Tech SSO — Architecture
 
+> **Superseded 2026-09-04 — see `docs/PHASE-1-REALM.md`.** Keycloak is now
+> the identity provider (local users, MFA at login); Zoho becomes a
+> downstream SAML app in Phase 2. Kept below for history / the reasoning
+> that led to the change.
+
 ## Decision (2026-09-02): Keycloak brokers to Zoho
 
 Employees already have Zoho Mail accounts on `@azultech.rw`. We want them to sign in

@@ -18,7 +18,9 @@ services:
       retries: 5
 
   keycloak:
-    image: quay.io/keycloak/keycloak:20.0.5
+    # Upgraded from 20.0.5 (EOL) — this deployment is the reference architecture,
+    # it runs the version we'd hand to a client or an auditor.
+    image: quay.io/keycloak/keycloak:26.7.3
     container_name: azul-tech-keycloak
     restart: unless-stopped
     command: start-dev
@@ -35,8 +37,6 @@ services:
       KC_PROXY: none
       KC_HEALTH_ENABLED: true
       KC_METRICS_ENABLED: true
-      # 'scripts' enables the deployed script authenticator (Azul Tech Email Domain Guard)
-      KC_FEATURES: scripts
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
       KC_LOG_LEVEL: ${KC_LOG_LEVEL:-INFO}
@@ -44,10 +44,9 @@ services:
     ports:
       - "${KC_HTTP_PORT:-8081}:8080"
     volumes:
-      - ./keycloak/realm-export:/opt/keycloak/data/import
       - ./keycloak/config:/opt/keycloak/data/config
-      - ./keycloak/providers:/opt/keycloak/providers
-      # Custom "azultech" login theme (deep navy / royal-blue background)
+      # Custom "azultech" login theme (deep navy / royal-blue background) — this
+      # is now the ONLY login page staff see; Keycloak is the IdP, not a broker.
       - ./keycloak/themes:/opt/keycloak/themes
     networks:
       - keycloak-network

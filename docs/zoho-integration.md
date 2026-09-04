@@ -1,11 +1,9 @@
 # Zoho ↔ Keycloak Integration (Azul Tech SSO)
 
-> **Direction of trust:** Zoho is the identity provider. Keycloak **brokers** to Zoho.
-> Employees keep their existing Zoho Mail password — they never set a Keycloak password.
->
-> (An earlier draft of this doc described the opposite setup — Keycloak as IdP and
-> Zoho Mail as a SAML service provider. That is **not** what we run. See
-> `docs/architecture.md`.)
+> **Superseded 2026-09-04.** This doc described Zoho brokering (Zoho as the
+> password authority). We've since switched direction: **Keycloak is now the
+> identity provider**, and Zoho becomes a downstream SAML app in Phase 2. See
+> `docs/PHASE-1-REALM.md` for the current design. Kept below for history.
 
 ```
 Browser ─▶ App (e.g. Lunchify)
