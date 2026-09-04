@@ -177,9 +177,14 @@ declaratively is deferred; noted as a candidate for the
 
 ## Break-glass
 
-Not yet implemented: a realm-local admin account excluded from MFA
-enforcement, credentials sealed/stored outside the normal secret store. Add
-before Phase 1 is considered "live" per Rene's ask.
+`keycloak/scripts/create-break-glass-admin.sh <username>` creates a
+realm-local admin account (member of `/Platform-Admins`) with no MFA
+required actions and a password generated and shown exactly once, so it
+still works if the normal MFA path itself is what's broken. Run it directly
+in your own terminal, not through anything whose output you don't fully
+control — the point of "break-glass" is this credential lives in a sealed
+store (physical safe / offline password manager), not day-to-day use, not
+git, not chat.
 
 ## Patching cadence
 
@@ -189,7 +194,6 @@ Proposed cadence for the ISMS is in `docs/patching-cadence.md`.
 
 - HA (2+ Keycloak nodes, Postgres failover) — infra, needs servers; not a
   Phase 1 blocker (see above)
-- Break-glass account
 - Admin-event archival to an append-only store, version-controlled routine
   entitlement changes — flagged by Rene as Finance/HR-migration-time work,
   not needed now

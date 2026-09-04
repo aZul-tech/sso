@@ -104,6 +104,21 @@ list):
 ./keycloak/scripts/provision-users.sh keycloak/scripts/<real-staff>.csv
 ```
 
+Create the break-glass admin account (run this yourself, directly — see the
+script's header for why):
+
+```bash
+./keycloak/scripts/create-break-glass-admin.sh <break-glass-username>
+```
+
+Schedule Lunchify's data-file backup (cron; `BACKUP_DIR` should itself be
+synced off this box):
+
+```bash
+crontab -e
+# 0 2 * * * DATA_FILE=/app/server/data/lunchify.json BACKUP_DIR=/var/backups/lunchify /app/server/scripts/backup-data.sh
+```
+
 TLS + reverse proxy:
 
 ```bash
@@ -175,9 +190,12 @@ go-live.
 
 ## Still open / not this repo's job
 
-- **Lunchify's own deployment** (its API + web, its database) — see the
-  Lunchify repo's `DEPLOYMENT.md`. Lunchify still ships an in-memory/file
-  store that must be swapped for a real DB before production.
+- **Lunchify's own deployment** (its API + web) — see the Lunchify repo's
+  `README.md`. Its data store is a single JSON file with atomic,
+  immediate writes (not just periodic) — adequate at this headcount; what it
+  actually lacked was backups leaving the box, which
+  `server/scripts/backup-data.sh` now covers. Revisit a real database if/when
+  write volume or headcount grows well past the pilot.
 - Monitoring / alerting on the SSO endpoint.
 - HA (2+ Keycloak nodes, Postgres failover) — not needed for the pilot; see
   `docs/PHASE-1-REALM.md`.
