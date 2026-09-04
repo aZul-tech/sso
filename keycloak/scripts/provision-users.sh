@@ -105,17 +105,21 @@ tail -n +2 "$CSV" | while IFS=, read -r name email department lunchify_group; do
   [ "$first" = "$last" ] && last=""
 
   uid=$(kc get users -r "$REALM" -q "email=$email" --fields id --format csv --noquotes 2>/dev/null | head -1)
+  is_new=""
   if [ -z "$uid" ]; then
     echo ">> creating $email"
+    is_new="yes"
+    dept_attr_args=()
+    [ -n "$department" ] && dept_attr_args=(-s "attributes.department=[\"$department\"]")
     kc create users -r "$REALM" \
       -s "username=$email" -s "email=$email" -s 'emailVerified=false' -s 'enabled=true' \
       -s "firstName=$first" -s "lastName=$last" \
-      -s "attributes.department=[\"$department\"]" \
+      "${dept_attr_args[@]}" \
       -s 'requiredActions=["VERIFY_EMAIL","UPDATE_PASSWORD","CONFIGURE_TOTP","CONFIGURE_RECOVERY_AUTHN_CODES"]' >/dev/null
     uid=$(kc get users -r "$REALM" -q "email=$email" --fields id --format csv --noquotes)
   else
     echo ">> $email already exists — updating department/group only, no password touched"
-    kc update "users/$uid" -r "$REALM" -s "attributes.department=[\"$department\"]" >/dev/null
+    [ -n "$department" ] && kc update "users/$uid" -r "$REALM" -s "attributes.department=[\"$department\"]" >/dev/null
   fi
 
   if [ -n "$department" ]; then
@@ -133,6 +137,22 @@ tail -n +2 "$CSV" | while IFS=, read -r name email department lunchify_group; do
   fi
 
   echo "   department=$department  lunchify_group=${lunchify_group:-none}"
+
+  pending="$is_new"
+  if [ -z "$pending" ]; then
+    # Existing user: only resend the onboarding email if they still have
+    # required actions outstanding (haven't finished setting themselves up).
+    # A fully onboarded user (Yvonne, Ronald, ...) must never be forced back
+    # through password + MFA setup just because this script ran again.
+    user_json=$(kc get "users/$uid" -r "$REALM")
+    pending=$(echo "$user_json" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const u=JSON.parse(s);process.stdout.write((u.requiredActions&&u.requiredActions.length)?"yes":"")}catch(e){}})')
+  fi
+
+  if [ -z "$pending" ]; then
+    echo "   already fully onboarded — not resending the onboarding email"
+    continue
+  fi
+
   echo "   sending execute-actions email (VERIFY_EMAIL, UPDATE_PASSWORD, CONFIGURE_TOTP, CONFIGURE_RECOVERY_AUTHN_CODES)"
   http_code=$(send_execute_actions_email "$uid")
   if [ "$http_code" != "204" ]; then
