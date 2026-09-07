@@ -40,7 +40,7 @@ flagged with ⚠️ below.
 | # | Decision | Where it goes |
 |---|----------|---------------|
 | 1 | **Company email domain(s)** for the `ALLOWED_EMAIL_DOMAIN` check on the app side (Lunchify). Repo assumes `azultech.rw`. | Lunchify's `.env` → `ALLOWED_EMAIL_DOMAIN` |
-| 2 | **Public hostnames.** Repo assumes `sso.azultech.rw` (Keycloak) and `lunch.azultech.rw` (Lunchify). | `.env`, nginx config |
+| 2 | **Public hostnames.** Repo assumes `sso.azultech.rw` (Keycloak) and `lunchify.azultech.rw` (Lunchify). | `.env`, nginx config |
 | 3 | **SMTP** — Zoho Mail on `support@azultech.rw`, verified working (auth + real delivery through Keycloak). Just needs the mailbox password put on the server. | `.env` → `SMTP_PASSWORD` |
 | 4 | **`KEYCLOAK_ADMIN_PASSWORD`** and every other secret in `.env` — generate fresh values, don't reuse anything from local dev. | `.env` |
 
@@ -126,7 +126,7 @@ TLS + reverse proxy:
 cp nginx/azultech-sso.conf.example /etc/nginx/sites-available/azultech-sso.conf
 # edit hostnames + the Lunchify upstream port if not 3001
 ln -s /etc/nginx/sites-available/azultech-sso.conf /etc/nginx/sites-enabled/
-certbot --nginx -d sso.azultech.rw -d lunch.azultech.rw
+certbot --nginx -d sso.azultech.rw -d lunchify.azultech.rw
 nginx -t && systemctl reload nginx
 ```
 

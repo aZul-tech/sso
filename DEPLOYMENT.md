@@ -6,7 +6,7 @@
 Two repos, deployed on one Linux server (Docker + nginx):
 
 - `sso/` — Keycloak + Postgres  → `https://sso.azultech.rw`
-- `lunch app/` — Lunchify (API + web) → `https://lunch.azultech.rw`
+- `lunch app/` — Lunchify (API + web) → `https://lunchify.azultech.rw`
 
 Lunchify talks to Keycloak over its **public URL** (for JWKS), so the two stacks
 are independent — no shared Docker network required.
@@ -16,7 +16,7 @@ are independent — no shared Docker network required.
 ## 0. Prerequisites (IT)
 
 - A VM with Docker + Docker Compose + nginx + certbot
-- DNS `A` records: `sso.azultech.rw` and `lunch.azultech.rw` → the VM's public IP
+- DNS `A` records: `sso.azultech.rw` and `lunchify.azultech.rw` → the VM's public IP
 - Both repos copied to the server (e.g. `/opt/azultech/sso`, `/opt/azultech/lunch-app`)
 
 ---
@@ -53,7 +53,7 @@ Apply the realm wiring (idempotent):
 ```
 
 Then in the Keycloak admin console (`https://sso.azultech.rw/admin`):
-- **Clients → lunchify → Valid redirect URIs**: `https://lunch.azultech.rw/*`
+- **Clients → lunchify → Valid redirect URIs**: `https://lunchify.azultech.rw/*`
 - same for **Web origins** and **Valid post logout redirect URIs**
 
 In the **Zoho API Console**, add the production redirect URI to the app:
@@ -70,7 +70,7 @@ cp .env.docker.example .env.docker
 
 Edit `.env.docker`:
 ```
-FRONTEND_URL=https://lunch.azultech.rw
+FRONTEND_URL=https://lunchify.azultech.rw
 KEYCLOAK_ISSUER=https://sso.azultech.rw/realms/azul-tech
 KEYCLOAK_JWKS_URI=https://sso.azultech.rw/realms/azul-tech/protocol/openid-connect/certs
 ALLOWED_EMAIL_DOMAIN=azultech.rw
@@ -104,7 +104,7 @@ Data persists in the `lunchify_data` volume (`docker volume inspect lunch-app_lu
 ```bash
 cp /opt/azultech/sso/nginx/azultech-sso.conf.example /etc/nginx/sites-available/azultech-sso.conf
 ln -s /etc/nginx/sites-available/azultech-sso.conf /etc/nginx/sites-enabled/
-certbot --nginx -d sso.azultech.rw -d lunch.azultech.rw
+certbot --nginx -d sso.azultech.rw -d lunchify.azultech.rw
 nginx -t && systemctl reload nginx
 ```
 
@@ -115,10 +115,10 @@ nginx -t && systemctl reload nginx
 ```bash
 curl -s https://sso.azultech.rw/realms/azul-tech/.well-known/openid-configuration | grep issuer
 #  -> "issuer":"https://sso.azultech.rw/realms/azul-tech"
-curl -s https://lunch.azultech.rw/api/health
+curl -s https://lunchify.azultech.rw/api/health
 ```
 
-Then in a browser: `https://lunch.azultech.rw` → **Continue with Azul Tech SSO** →
+Then in a browser: `https://lunchify.azultech.rw` → **Continue with Azul Tech SSO** →
 sign in with a real `@azultech.rw` Zoho account → lands in Lunchify. The
 `BOOTSTRAP_ADMIN_EMAILS` account becomes SUPER_ADMIN; everyone else is EMPLOYEE.
 

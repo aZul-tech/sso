@@ -1,6 +1,6 @@
 # /etc/nginx/sites-available/azultech-sso.conf
 # TLS termination + reverse proxy for Keycloak and Lunchify.
-# Get certs first:  certbot --nginx -d sso.azultech.rw -d lunch.azultech.rw
+# Get certs first:  certbot --nginx -d sso.azultech.rw -d lunchify.azultech.rw
 
 # ---------- Keycloak ----------
 server {
@@ -29,15 +29,15 @@ server {
 # ---------- Lunchify ----------
 server {
     listen 80;
-    server_name lunch.azultech.rw;
+    server_name lunchify.azultech.rw;
     return 301 https://$host$request_uri;
 }
 server {
     listen 443 ssl http2;
-    server_name lunch.azultech.rw;
+    server_name lunchify.azultech.rw;
 
-    ssl_certificate     /etc/letsencrypt/live/lunch.azultech.rw/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/lunch.azultech.rw/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/lunchify.azultech.rw/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/lunchify.azultech.rw/privkey.pem;
 
     location / {
         proxy_pass http://127.0.0.1:3001;
