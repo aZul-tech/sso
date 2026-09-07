@@ -41,7 +41,7 @@ flagged with ⚠️ below.
 |---|----------|---------------|
 | 1 | **Company email domain(s)** for the `ALLOWED_EMAIL_DOMAIN` check on the app side (Lunchify). Repo assumes `azultech.rw`. | Lunchify's `.env` → `ALLOWED_EMAIL_DOMAIN` |
 | 2 | **Public hostnames.** Repo assumes `sso.azultech.rw` (Keycloak) and `lunch.azultech.rw` (Lunchify). | `.env`, nginx config |
-| 3 | **Real SMTP credentials** for onboarding/password-reset emails (`execute-actions-email` won't deliver without them). | `.env` → `SMTP_*` |
+| 3 | **SMTP** — Zoho Mail on `support@azultech.rw`, verified working (auth + real delivery through Keycloak). Just needs the mailbox password put on the server. | `.env` → `SMTP_PASSWORD` |
 | 4 | **`KEYCLOAK_ADMIN_PASSWORD`** and every other secret in `.env` — generate fresh values, don't reuse anything from local dev. | `.env` |
 
 ---
@@ -72,12 +72,13 @@ KC_HOSTNAME_URL=https://sso.azultech.rw
 KC_HOSTNAME_ADMIN_URL=https://sso.azultech.rw
 KC_HOSTNAME_STRICT=true
 KC_HOSTNAME_STRICT_HTTPS=true
-SMTP_HOST=<real SMTP host>                    # decision #3
+SMTP_HOST=smtp.zoho.com                       # Zoho Mail — verified working
 SMTP_PORT=587
-SMTP_FROM=sso@azultech.rw
-SMTP_FROM_NAME="Azul Tech SSO"
-SMTP_USER=<smtp username>
-SMTP_PASSWORD=<smtp password>
+SMTP_FROM=support@azultech.rw
+SMTP_FROM_NAME="Azul Tech"
+SMTP_USER=support@azultech.rw
+SMTP_PASSWORD=<the support@azultech.rw mailbox password — get from Ronald/Yvonne>
+SMTP_SSL=false
 SMTP_STARTTLS=true
 SMTP_AUTH=true
 PLATFORM_ADMIN_EMAILS=<comma-separated named platform-admin accounts>

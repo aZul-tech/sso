@@ -18,6 +18,11 @@ keycloak/providers/*.jar
 keycloak/scripts/*.csv
 !keycloak/scripts/pilot-users.example.csv
 
+# Local-machine dev workarounds (e.g. an antivirus TLS-intercept root CA).
+# Never on a real server — never committed.
+keycloak/local-*-ca.pem
+docker-compose.override.yml
+
 # OS
 .DS_Store
 Thumbs.db
