@@ -71,6 +71,13 @@ fi
 echo ">> login theme: azultech"
 kc update "realms/$REALM" -s 'loginTheme=azultech' >/dev/null
 
+# Brand the master realm's login too, so the built-in admin console
+# (sso.azultech.rw/admin/master/console) matches the rest. Platform-admins
+# should normally use the azultech realm console instead — this is only for
+# the break-glass 'admin' account — but keeping one look avoids confusion.
+echo ">> login theme: azultech (master realm admin console)"
+kc update "realms/master" -s 'loginTheme=azultech' >/dev/null 2>&1 || true
+
 echo ">> OTP policy: TOTP, 6 digits, 30s period"
 kc update "realms/$REALM" -s 'otpPolicyType=totp' -s 'otpPolicyAlgorithm=HmacSHA1' \
   -s 'otpPolicyDigits=6' -s 'otpPolicyPeriod=30' -s 'otpPolicyLookAheadWindow=1' >/dev/null
