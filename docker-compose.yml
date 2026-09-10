@@ -29,12 +29,16 @@ services:
       KC_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-keycloak}
       KC_DB_USERNAME: ${POSTGRES_USER:-keycloak}
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
-      KC_HOSTNAME_URL: ${KC_HOSTNAME_URL:-http://localhost:8081}
-      KC_HOSTNAME_ADMIN_URL: ${KC_HOSTNAME_ADMIN_URL:-http://localhost:8081}
+      # Keycloak 26 dropped "hostname v1" (KC_HOSTNAME_URL / _STRICT_HTTPS / KC_PROXY)
+      # in favor of v2: KC_HOSTNAME takes a plain host or a full URL (scheme comes
+      # from the URL itself, so no separate _STRICT_HTTPS flag is needed), and
+      # KC_PROXY_HEADERS replaces KC_PROXY. .env keeps the old variable names for
+      # continuity; only the container-facing keys below changed.
+      KC_HOSTNAME: ${KC_HOSTNAME_URL:-http://localhost:8081}
+      KC_HOSTNAME_ADMIN: ${KC_HOSTNAME_ADMIN_URL:-http://localhost:8081}
       KC_HOSTNAME_STRICT: ${KC_HOSTNAME_STRICT:-false}
       KC_HTTP_ENABLED: true
-      KC_HOSTNAME_STRICT_HTTPS: ${KC_HOSTNAME_STRICT_HTTPS:-false}
-      KC_PROXY: none
+      KC_PROXY_HEADERS: ${KC_PROXY_HEADERS:-}
       KC_HEALTH_ENABLED: true
       KC_METRICS_ENABLED: true
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}

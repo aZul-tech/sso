@@ -15,11 +15,22 @@ services:
     # Production mode: no dev shortcuts, optimized startup.
     command: start --optimized
     environment:
-      KC_PROXY: edge
+      # Keycloak 26 "hostname v2": KC_PROXY (edge/reencrypt/passthrough) was
+      # replaced by KC_PROXY_HEADERS. xforwarded = trust X-Forwarded-* from the
+      # upstream proxy, same intent as the old "edge" mode.
+      KC_PROXY_HEADERS: xforwarded
       KC_HOSTNAME_STRICT: "true"
       KC_HTTP_ENABLED: "true"
-    ports:
-      - "127.0.0.1:8081:8080"   # only reachable by the local reverse proxy
+    # `ports:` lists are CONCATENATED (not replaced) across compose -f files,
+    # so without !override this would additionally publish 0.0.0.0:8081 from
+    # docker-compose.yml's default alongside this one, and the container would
+    # fail to bind its own port twice on startup.
+    ports: !override
+      # 0.0.0.0 so the gateway VM (separate box, proxies straight to this
+      # VM's LAN IP:8081 rather than through a local nginx hop) can reach it.
+      # This host has no other externally-reachable interface than the LAN
+      # NIC, so this is equivalent in practice to binding the specific LAN IP.
+      - "8081:8080"
     build:
       # A tiny build step so `start --optimized` has a pre-built image incl. the
       # scripts feature + the domain-guard provider.

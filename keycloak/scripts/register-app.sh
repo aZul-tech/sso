@@ -5,7 +5,7 @@
 set -e
 
 # Configuration
-KEYCLOAK_URL="${KEYCLOAK_URL:-http://localhost:8080}"
+KEYCLOAK_URL="${KEYCLOAK_URL:-http://localhost:8081}"
 REALM="${REALM:-azul-tech}"
 ADMIN_USER="${ADMIN_USER:-admin}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin}"

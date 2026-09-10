@@ -49,24 +49,36 @@ kc() { docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh "$@"; }
 
 kc config credentials --server http://localhost:8080 --realm master --user "$ADMIN" --password "$ADMIN_PW" >/dev/null
 
-# execute-actions-email must be triggered against the PUBLIC-facing URL
-# (same host:port a browser uses), not the internal docker network address —
-# the resulting action-token bakes in whatever issuer it was minted against,
-# and Keycloak rejects the link if that doesn't match the realm's real
-# issuer. kcadm above talks to Keycloak over the internal Docker network
-# (port 8080), so calls that mint a link for a human to click go through curl
-# against the public URL instead.
-PUBLIC_KC_URL="${KC_HOSTNAME_URL:-http://localhost:8081}"
-PUBLIC_ADMIN_TOKEN=$(curl -s -X POST "$PUBLIC_KC_URL/realms/master/protocol/openid-connect/token" \
-  -d client_id=admin-cli -d "username=$ADMIN" -d "password=$ADMIN_PW" -d grant_type=password \
-  | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).access_token))')
+# execute-actions-email must be triggered against a URL Keycloak is actually
+# configured to advertise as its issuer (KC_HOSTNAME_URL) — kcadm above talks
+# to Keycloak over the internal Docker network (port 8080) instead, which is
+# fine for admin calls but NOT for minting a link a human will click, unless
+# that internal address happens to match the configured issuer too.
+#
+# With KC_HOSTNAME_STRICT=true (hostname v2), Keycloak advertises the same
+# fixed issuer regardless of which address was used to reach it — so any
+# reachable-from-this-box address works equally well here. Set
+# KC_ADMIN_API_URL in .env to override when the public URL isn't reachable
+# from this VM itself (e.g. hairpin-NAT behind a gateway VM — doesn't affect
+# real external users, only this box calling its own public hostname).
+PUBLIC_KC_URL="${KC_ADMIN_API_URL:-${KC_HOSTNAME_URL:-https://sso.azultech.rw}}"
+
+fetch_public_admin_token() {
+  curl -s -X POST "$PUBLIC_KC_URL/realms/master/protocol/openid-connect/token" \
+    -d client_id=admin-cli -d "username=$ADMIN" -d "password=$ADMIN_PW" -d grant_type=password \
+    | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).access_token))'
+}
 
 send_execute_actions_email() {
   local uid="$1" resp code
+  # Fetch a fresh token per call rather than once at the top of the script —
+  # the realm's access-token lifespan is deliberately short, and a roster of
+  # any size (esp. with real SMTP round-trips) can outlast a single token.
+  local token; token=$(fetch_public_admin_token)
   # (avoid `-o /dev/null -w` — flaky in this shell; capture body+code together instead)
   resp=$(curl -s -w $'\n%{http_code}' -X PUT \
     "$PUBLIC_KC_URL/admin/realms/$REALM/users/$uid/execute-actions-email?client_id=lunchify&redirect_uri=$(node -e "console.log(encodeURIComponent(process.argv[1]))" "${LUNCHIFY_REDIRECT_BASE:-http://localhost:5173/}")&lifespan=$ACTION_LIFESPAN" \
-    -H "Authorization: Bearer $PUBLIC_ADMIN_TOKEN" -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer $token" -H 'Content-Type: application/json' \
     -d '["VERIFY_EMAIL","UPDATE_PASSWORD","CONFIGURE_TOTP","CONFIGURE_RECOVERY_AUTHN_CODES"]' || true)
   code=$(echo "$resp" | tail -1)
   echo "$code"
