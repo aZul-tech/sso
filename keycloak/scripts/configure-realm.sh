@@ -56,7 +56,7 @@ else
   echo ">> creating realm '$REALM'"
   kc create realms \
     -s "realm=$REALM" -s 'enabled=true' \
-    -s 'displayName=Azul Tech' -s 'displayNameHtml=<strong>Azul Tech</strong>' \
+    -s 'displayName=Azul SSO' -s 'displayNameHtml=<strong>Azul Tech</strong>' \
     -s 'sslRequired=external' \
     -s 'registrationAllowed=false' -s 'resetPasswordAllowed=true' \
     -s 'loginWithEmailAllowed=true' -s 'duplicateEmailsAllowed=false' \
@@ -68,8 +68,16 @@ else
     -s 'internationalizationEnabled=true' -s 'supportedLocales=["en","sw"]' -s 'defaultLocale=en' >/dev/null
 fi
 
-echo ">> login theme: azultech"
-kc update "realms/$REALM" -s 'loginTheme=azultech' >/dev/null
+echo ">> login + email themes: azultech"
+kc update "realms/$REALM" -s 'loginTheme=azultech' -s 'emailTheme=azultech' >/dev/null
+
+# The realm display name is what an authenticator app (Google Authenticator,
+# FreeOTP, Microsoft Authenticator) shows next to the 6-digit code, and what
+# Keycloak's emails call the account ("your Azul SSO account"). Rene's review
+# (image 1): that should read "Azul SSO", not "Azul Tech". The login page
+# header is driven by displayNameHtml (below), so it can stay "Azul Tech".
+echo ">> realm display name: 'Azul SSO' (authenticator-app issuer + email account name)"
+kc update "realms/$REALM" -s 'displayName=Azul SSO' -s 'displayNameHtml=<strong>Azul Tech</strong>' >/dev/null
 
 # Brand the master realm's login too, so the built-in admin console
 # (sso.azultech.rw/admin/master/console) matches the rest. Platform-admins
@@ -85,7 +93,7 @@ kc update "realms/$REALM" -s 'otpPolicyType=totp' -s 'otpPolicyAlgorithm=HmacSHA
 echo ">> SMTP (for execute-actions-email onboarding — dev: MailHog, prod: real mail server)"
 kc update "realms/$REALM" \
   -s "smtpServer.host=${SMTP_HOST:-mailhog}" -s "smtpServer.port=${SMTP_PORT:-1025}" \
-  -s "smtpServer.from=${SMTP_FROM:-sso@azultech.rw}" -s "smtpServer.fromDisplayName=${SMTP_FROM_NAME:-Azul Tech SSO}" \
+  -s "smtpServer.from=${SMTP_FROM:-sso@azultech.rw}" -s "smtpServer.fromDisplayName=${SMTP_FROM_NAME:-Azul SSO}" \
   -s "smtpServer.auth=${SMTP_AUTH:-false}" -s "smtpServer.user=${SMTP_USER:-}" -s "smtpServer.password=${SMTP_PASSWORD:-}" \
   -s "smtpServer.ssl=${SMTP_SSL:-false}" -s "smtpServer.starttls=${SMTP_STARTTLS:-false}" >/dev/null
 
