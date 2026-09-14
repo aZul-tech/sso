@@ -40,7 +40,7 @@ with the (rewritten) `register-app.sh`:
 
 ```bash
 cd sso
-./keycloak/scripts/register-app.sh hrm "Azul Tech People" "http://localhost:5173/api/auth/sso/callback"
+./keycloak/scripts/register-app.sh hrm "Azul Tech People" "http://localhost:4000/api/auth/sso/callback"
 ```
 
 Re-running it updates settings without rotating the secret. To deliberately
@@ -49,7 +49,7 @@ script) — remember to update the app's `.env` at the same time.
 
 | Setting | Dev value |
 |---|---|
-| Redirect URI | `http://localhost:5173/api/auth/sso/callback` (the **browser-facing** origin — Vite's dev proxy forwards it to the Express server on :4000, same as every other `/api` call) |
+| Redirect URI | `http://localhost:4000/api/auth/sso/callback` — the **browser-facing** origin. HRM normally runs as a single production-mode container (`docker compose up`, no separate Vite dev server), so this is the container's own published port. If you instead run HRM with `npm run dev` (Vite on :5173 proxying `/api` to :4000), re-register with `http://localhost:5173/api/auth/sso/callback` instead — Keycloak only accepts an exact match, so the two modes need re-registering when you switch between them. |
 | Web origins | none — nothing in the browser calls Keycloak directly, so no CORS is needed |
 
 ## Server (`server/`)
@@ -111,19 +111,38 @@ if this ever looks abused in practice.
 - **Production redirect URI.** Once HRM has a real hostname, register it
   with `register-app.sh` again (updates the existing client, secret stays
   the same) and set `KEYCLOAK_REDIRECT_URI` to match exactly.
-- Not yet tested end-to-end in a real browser (code exchange, ID-token
-  verification, and the redirect to Keycloak's login page were all verified
-  directly against the dev Keycloak — see the smoke test below — but nobody
-  has clicked the button and actually signed in yet).
 
-## Smoke test done so far
+## Verified with a real run (2026-09-14)
+
+Built and started the actual `docker compose` container (not `npm run dev`),
+and drove the real Authorization Code + PKCE exchange with curl through
+Keycloak's actual login form — a disposable Keycloak test user, real
+credentials, no mocked steps:
 
 ```
-GET /api/auth/sso/status   -> {"enabled":true}
-GET /api/auth/sso/login    -> 302 to Keycloak's /auth endpoint, correct
-                               client_id/redirect_uri/PKCE challenge,
-                               Keycloak returns 200 for that exact URL
+GET  /api/auth/sso/login    -> 302 to Keycloak, correct client_id/redirect_uri/PKCE
+GET  <Keycloak's login page>  -> 200, real form
+POST <form action, real username+password> -> 302 back to HRM's callback with ?code=...
+GET  /api/auth/sso/callback -> 302 to /, Set-Cookie: hrm_token=... (Secure; HttpOnly)
+GET  /api/auth/me           -> the correct HRM user; audit_log: login_success_sso
 ```
-Still needed: a real browser run — click the button, log in as a real
-`@azultech.rw` user whose email matches an existing HRM account, land back
-in HRM signed in.
+
+Also verified the safety property that matters most here: a second Keycloak
+user with **no matching HRM account** goes through the identical flow and is
+correctly refused — `Location: /login?sso_error=no_account`, no `hrm_token`
+issued, no row created in HRM's `users` table, `audit_log` gets
+`login_failed_sso`. Both test accounts deleted afterward.
+
+This run is also what caught a real bug in the Docker-discovery path (fixed
+in the same session, see the `keycloakClient.js` git history): the
+`.well-known` URL built from `KEYCLOAK_SERVER_URL` was missing the realm
+path (`/realms/azultech`), so discovery 404'd and `/sso/login` always
+returned 503 from inside the container. Fixing that surfaced a second,
+subtler issue — Keycloak (hostname-strict off in dev) reflects whatever
+host:port a request used into *every* URL in its discovery document,
+`issuer` included, so naively trusting that response would have set the
+OIDC issuer to the Docker-internal address, which never matches the `iss`
+claim on tokens actually issued to the browser. The fix keeps `issuer` and
+`authorization_endpoint` rooted at `KEYCLOAK_ISSUER` (browser-facing) and
+only `token_endpoint`/`userinfo_endpoint`/`jwks_uri` rooted at
+`KEYCLOAK_SERVER_URL` (calls the server makes for itself).
