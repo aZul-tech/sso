@@ -20,17 +20,37 @@ more contained than handing the browser a Keycloak token, and every existing
 route (`requireAuth`, `requireRole`, every Admin/HR/Employee check) needed
 **zero changes**.
 
-## Provisioning policy — SSO signs in, it does not sign up
+## Provisioning policy — SSO can sign someone up, but only at Employee
 
-Unlike Lunchify (any `@azultech.rw` account auto-provisions as EMPLOYEE on
-first SSO login), **HRM never auto-creates an account from SSO**. An Admin
-still creates every login (Admin/HR/Employee) deliberately in **User
-Accounts**, exactly as before. SSO is matched to an existing HRM account by
-email; if there isn't one, the person is sent back to the login page with
-*"Your Azul Tech SSO account isn't linked to an HRM login. Ask your Admin to
-create one for you first."* This matches HRM's existing philosophy (every
-login is a deliberate grant) and keeps Keycloak out of the Admin/HR/Employee
-role decision for a system that holds this much sensitive data.
+Revised from the first pass (which required an Admin to pre-create every
+login, even Employee): every person already gets provisioned in Keycloak as
+part of company onboarding, and requiring HR to *also* manually create an
+HRM login before that same person can see their own basic profile — the
+entire point of the Employee tier (see README "Access model") — was pure
+duplicate work for no real security benefit. So now, closer to Lunchify's
+model but deliberately narrower:
+
+- First SSO login for an email with **no** existing HRM account
+  auto-creates one — but **always at the `employee` role, never `hr` or
+  `admin`**. Gated on the Keycloak account actually having finished
+  onboarding (`email_verified` on the ID token) — someone mid-setup doesn't
+  get an HRM login yet either.
+- **HR and Admin access is still always a deliberate grant.** An Admin
+  promotes an auto-provisioned Employee account to HR/Admin the same way
+  they'd change anyone else's role, in **User Accounts** — SSO itself can
+  never hand out anything above Employee.
+- An Admin disabling a login is still respected — SSO never reactivates a
+  disabled account (`sso_error=disabled`).
+- A freshly auto-provisioned account has no linked roster record yet (the
+  `employees` table entry HR creates in **Employees**, which is what
+  carries department/documents/etc.) — the employee dashboard already had a
+  "no record linked yet" state for this, unchanged here.
+
+This still keeps Keycloak completely out of the HR/Admin decision — the one
+part of this that genuinely needed to stay a deliberate human action for a
+system holding this much sensitive data — while treating "can this person
+see their own basic profile" the same low-stakes way Lunchify treats
+"EMPLOYEE".
 
 ## Keycloak client
 
@@ -57,7 +77,7 @@ script) — remember to update the app's `.env` at the same time.
 | File | Role |
 |---|---|
 | `src/lib/keycloakClient.js` | OIDC discovery + client, via `openid-client` v5 (pinned — the server is CommonJS, v6 is ESM-only). `ssoEnabled()` is false unless all four `KEYCLOAK_*` vars are set. When `KEYCLOAK_SERVER_URL` differs from `KEYCLOAK_ISSUER` (Docker networking), discovery is fetched via the server URL but tokens are verified against the issuer — endpoint URLs are rewritten so HTTP calls reach Keycloak from inside the container. |
-| `src/routes/auth.js` | `GET /sso/status` (used by the login page to decide whether to show the button), `GET /sso/login` (builds the PKCE authorization URL, stores `{state, code_verifier}` in a short-lived signed cookie), `GET /sso/callback` (exchanges the code, verifies the ID token, looks up the local user **by email only — never creates one**, mints the same `hrm_token` cookie password login does) |
+| `src/routes/auth.js` | `GET /sso/status` (used by the login page to decide whether to show the button), `GET /sso/login` (builds the PKCE authorization URL, stores `{state, code_verifier}` in a short-lived signed cookie), `GET /sso/callback` (exchanges the code, verifies the ID token, looks up the local user by email — auto-provisions an `employee`-role account if there isn't one yet, see "Provisioning policy" — mints the same `hrm_token` cookie password login does) |
 
 `server/.env` (see `.env.example`):
 ```
@@ -90,9 +110,10 @@ Keycloak's token/userinfo endpoints itself, only follows two redirects.
 
 ## Roles
 
-Unchanged from today: Admin/HR/Employee live in HRM's own `users` table.
-Keycloak proves *who* someone is (their email); it is not involved in *what*
-they're allowed to do. See "Provisioning policy" above.
+Admin/HR/Employee live in HRM's own `users` table, same as always. Keycloak
+proves *who* someone is (their email, via a verified onboarding); it can
+provision the lowest tier but is never involved in the HR/Admin decision.
+See "Provisioning policy" above.
 
 ## Rate limiting
 
@@ -127,11 +148,20 @@ GET  /api/auth/sso/callback -> 302 to /, Set-Cookie: hrm_token=... (Secure; Http
 GET  /api/auth/me           -> the correct HRM user; audit_log: login_success_sso
 ```
 
-Also verified the safety property that matters most here: a second Keycloak
-user with **no matching HRM account** goes through the identical flow and is
-correctly refused — `Location: /login?sso_error=no_account`, no `hrm_token`
-issued, no row created in HRM's `users` table, `audit_log` gets
-`login_failed_sso`. Both test accounts deleted afterward.
+Also verified, with the same real-form curl approach, once auto-provisioning
+was added (2026-09-14, second pass):
+
+- A Keycloak user with **no existing HRM account**, verified email → signed
+  in successfully, a new `employee`-role account was created automatically
+  (`audit_log`: `user_created_via_sso` then `login_success_sso`), name
+  pulled from the Keycloak profile, no `employees` roster record (the
+  existing "not linked yet" dashboard state handles that, unchanged).
+- A Keycloak user matching a **disabled** HRM account → still correctly
+  refused (`Location: /login?sso_error=disabled`, no `hrm_token`,
+  `audit_log`: `login_failed_sso`) — an Admin's disable is never overridden
+  by SSO.
+
+All test accounts deleted afterward on both sides.
 
 This run is also what caught a real bug in the Docker-discovery path (fixed
 in the same session, see the `keycloakClient.js` git history): the
