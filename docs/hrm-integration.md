@@ -20,7 +20,7 @@ more contained than handing the browser a Keycloak token, and every existing
 route (`requireAuth`, `requireRole`, every Admin/HR/Employee check) needed
 **zero changes**.
 
-## Provisioning policy — SSO can sign someone up, but only at Employee
+## Provisioning policy — SSO can sign someone up, at Employee or a named admin
 
 Revised from the first pass (which required an Admin to pre-create every
 login, even Employee): every person already gets provisioned in Keycloak as
@@ -28,29 +28,36 @@ part of company onboarding, and requiring HR to *also* manually create an
 HRM login before that same person can see their own basic profile — the
 entire point of the Employee tier (see README "Access model") — was pure
 duplicate work for no real security benefit. So now, closer to Lunchify's
-model but deliberately narrower:
+model:
 
 - First SSO login for an email with **no** existing HRM account
-  auto-creates one — but **always at the `employee` role, never `hr` or
-  `admin`**. Gated on the Keycloak account actually having finished
+  auto-creates one — **`employee`, unless the email is on
+  `BOOTSTRAP_ADMIN_EMAILS`, in which case `admin`. Never `hr`** — there is
+  no bootstrap path to HR, only to Employee or (named, explicitly
+  configured) Admin. Gated on the Keycloak account actually having finished
   onboarding (`email_verified` on the ID token) — someone mid-setup doesn't
   get an HRM login yet either.
-- **HR and Admin access is still always a deliberate grant.** An Admin
-  promotes an auto-provisioned Employee account to HR/Admin the same way
-  they'd change anyone else's role, in **User Accounts** — SSO itself can
-  never hand out anything above Employee.
+- `BOOTSTRAP_ADMIN_EMAILS` (`server/.env`) — same name and behaviour as
+  Lunchify's own setting of the same name (currently just Yvonne,
+  `u.yvonne@azultech.rw`, the company admin): a comma-separated list that
+  only ever **promotes**, never demotes, and only takes effect **on
+  login** — it also promotes an *existing* lower-tier account the next time
+  that person signs in via SSO, so leaving it set indefinitely is harmless.
+- **Beyond that named list, HR and Admin access is still always a
+  deliberate grant.** An Admin promotes anyone else the normal way, in
+  **User Accounts** — SSO can't hand out `hr` at all, and can't hand out
+  `admin` to anyone not on that explicit list.
 - An Admin disabling a login is still respected — SSO never reactivates a
-  disabled account (`sso_error=disabled`).
+  disabled account (`sso_error=disabled`), bootstrap list or not.
 - A freshly auto-provisioned account has no linked roster record yet (the
   `employees` table entry HR creates in **Employees**, which is what
   carries department/documents/etc.) — the employee dashboard already had a
   "no record linked yet" state for this, unchanged here.
 
-This still keeps Keycloak completely out of the HR/Admin decision — the one
-part of this that genuinely needed to stay a deliberate human action for a
-system holding this much sensitive data — while treating "can this person
-see their own basic profile" the same low-stakes way Lunchify treats
-"EMPLOYEE".
+This keeps Keycloak out of the HR/Admin decision **except** for a short,
+explicitly-named list someone deliberately configured — not a role or claim
+Keycloak itself can grant — while treating "can this person see their own
+basic profile" the same low-stakes way Lunchify treats "EMPLOYEE".
 
 ## Keycloak client
 
@@ -77,7 +84,7 @@ script) — remember to update the app's `.env` at the same time.
 | File | Role |
 |---|---|
 | `src/lib/keycloakClient.js` | OIDC discovery + client, via `openid-client` v5 (pinned — the server is CommonJS, v6 is ESM-only). `ssoEnabled()` is false unless all four `KEYCLOAK_*` vars are set. When `KEYCLOAK_SERVER_URL` differs from `KEYCLOAK_ISSUER` (Docker networking), discovery is fetched via the server URL but tokens are verified against the issuer — endpoint URLs are rewritten so HTTP calls reach Keycloak from inside the container. |
-| `src/routes/auth.js` | `GET /sso/status` (used by the login page to decide whether to show the button), `GET /sso/login` (builds the PKCE authorization URL, stores `{state, code_verifier}` in a short-lived signed cookie), `GET /sso/callback` (exchanges the code, verifies the ID token, looks up the local user by email — auto-provisions an `employee`-role account if there isn't one yet, see "Provisioning policy" — mints the same `hrm_token` cookie password login does) |
+| `src/routes/auth.js` | `GET /sso/status` (used by the login page to decide whether to show the button), `GET /sso/login` (builds the PKCE authorization URL, stores `{state, code_verifier}` in a short-lived signed cookie), `GET /sso/callback` (exchanges the code, verifies the ID token, looks up the local user by email — auto-provisions/promotes per "Provisioning policy" above — mints the same `hrm_token` cookie password login does) |
 
 `server/.env` (see `.env.example`):
 ```
@@ -161,7 +168,15 @@ was added (2026-09-14, second pass):
   `audit_log`: `login_failed_sso`) — an Admin's disable is never overridden
   by SSO.
 
-All test accounts deleted afterward on both sides.
+And once `BOOTSTRAP_ADMIN_EMAILS` was added (same day, third pass):
+
+- A **brand-new** account whose email is on the list → created straight at
+  `role: admin` (not `employee`).
+- An **existing `employee`-role account** whose email is on the list → next
+  SSO login promotes it to `admin` (`audit_log`: `user_promoted_via_sso`),
+  session confirmed via `/api/auth/me`.
+
+All test accounts deleted afterward on both sides, on all three passes.
 
 This run is also what caught a real bug in the Docker-discovery path (fixed
 in the same session, see the `keycloakClient.js` git history): the
