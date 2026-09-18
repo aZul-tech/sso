@@ -1,14 +1,14 @@
 <#import "template.ftl" as layout>
 <@layout.registrationLayout displayMessage=!messagesPerField.existsError('username','password') displayInfo=false; section>
   <#if section = "header">
-    <div class="client-branding">
-      <img class="client-brand-logo" src="${url.resourcesPath}/img/logo.png" alt="People" />
-      <div class="client-brand-name">People</div>
-      <div class="client-brand-subtitle">Secure access through Azul Tech SSO</div>
-    </div>
   <#elseif section = "form">
     <div id="kc-form">
       <div id="kc-form-wrapper">
+        <div class="client-branding">
+          <img class="client-brand-logo" src="${url.resourcesPath}/img/logo.png" alt="People" />
+          <div class="client-brand-name">People</div>
+          <div class="client-brand-subtitle">Secure access through Azul Tech SSO</div>
+        </div>
         <#if realm.password>
           <form id="kc-form-login" onsubmit="login.disabled = true; return true;" action="${url.loginAction}" method="post">
             <div class="form-group">

@@ -5,6 +5,8 @@
   --brand-card-shadow: rgba(120, 53, 15, 0.2);
 }
 
+#kc-header { display: none; }
+
 .client-branding {
   display: flex;
   flex-direction: column;
@@ -12,26 +14,26 @@
   gap: 10px;
   margin-bottom: 18px;
   text-align: center;
-  color: #ffffff;
+  color: #1a1a2e;
 }
 
 .client-brand-logo {
   width: 80px;
   height: 80px;
   display: block;
-  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.18));
+  border-radius: 16px;
 }
 
 .client-brand-name {
   font-size: 2.2rem;
   font-weight: 700;
   letter-spacing: 0.2px;
-  color: #ffffff;
+  color: #1a1a2e;
 }
 
 .client-brand-subtitle {
   margin: 0;
-  color: rgba(255, 255, 255, 0.8);
+  color: #6b7280;
   font-size: 0.95rem;
 }
 
