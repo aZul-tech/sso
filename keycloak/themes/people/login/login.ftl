@@ -2,7 +2,7 @@
 <@layout.registrationLayout displayMessage=!messagesPerField.existsError('username','password') displayInfo=false; section>
   <#if section = "header">
     <div class="client-branding">
-      <img class="client-brand-logo" src="${url.resourcesPath}/img/logo.svg" alt="People" />
+      <img class="client-brand-logo" src="${url.resourcesPath}/img/logo.png" alt="People" />
       <div class="client-brand-name">People</div>
       <div class="client-brand-subtitle">Secure access through Azul Tech SSO</div>
     </div>
