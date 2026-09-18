@@ -12,7 +12,6 @@
   gap: 10px;
   margin-bottom: 18px;
   text-align: center;
-  color: #1a1a2e;
 }
 
 .client-brand-logo {
@@ -22,16 +21,18 @@
   border-radius: 16px;
 }
 
+.card-pf .client-brand-name,
 .client-brand-name {
   font-size: 2.2rem;
   font-weight: 700;
   letter-spacing: 0.2px;
-  color: #1a1a2e;
+  color: var(--brand-primary) !important;
 }
 
+.card-pf .client-brand-subtitle,
 .client-brand-subtitle {
   margin: 0;
-  color: #6b7280;
+  color: #475569 !important;
   font-size: 0.95rem;
 }
 
