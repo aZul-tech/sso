@@ -170,7 +170,8 @@ kc update "clients/$LID" -r "$REALM" \
   -s "redirectUris=[\"$SPA_REDIRECT\"]" \
   -s "webOrigins=[\"$SPA_ORIGIN\"]" \
   -s "attributes.\"post.logout.redirect.uris\"=$SPA_REDIRECT" \
-  -s 'attributes."pkce.code.challenge.method"=S256' >/dev/null
+  -s 'attributes."pkce.code.challenge.method"=S256' \
+  -s 'attributes."login_theme"=lunchify' >/dev/null
 
 echo ">> lunchify client roles (app entitlement tiers live HERE, not as realm roles)"
 for r in super-admin restaurant-manager employee; do

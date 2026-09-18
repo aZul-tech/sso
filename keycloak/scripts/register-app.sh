@@ -14,17 +14,21 @@
 # secret).
 #
 # Usage:
-#   ./keycloak/scripts/register-app.sh <client-id> "<Display Name>" <redirect-uri> [web-origin]
+#   ./keycloak/scripts/register-app.sh <client-id> "<Display Name>" <redirect-uri> [web-origin] [login-theme]
 #
 # Example (a server-rendered app doing the Authorization Code exchange
 # itself — no browser-side calls to Keycloak, so no web-origin needed):
 #   ./keycloak/scripts/register-app.sh hrm "Azul Tech People" \
-#     "http://localhost:5173/api/auth/sso/callback"
+#     "http://localhost:5173/api/auth/sso/callback" "" "people"
 #
 # Example (a public SPA calling Keycloak endpoints directly from the
 # browser, like lunchify — needs its origin in webOrigins for CORS):
 #   ./keycloak/scripts/register-app.sh some-spa "Some SPA" \
-#     "http://localhost:5174/*" "http://localhost:5174"
+#     "http://localhost:5174/*" "http://localhost:5174" "lunchify"
+#
+# Keycloak supports a native per-client login theme via the client attribute
+# `login_theme`. This is how the shared Azul Tech SSO can keep one realm while
+# each app presents its own identity on the login page.
 #
 # Reads ../../.env for KC_REALM / KC_CONTAINER / KEYCLOAK_ADMIN / KEYCLOAK_ADMIN_PASSWORD
 # (same variables configure-realm.sh uses).
@@ -35,8 +39,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 if [ $# -lt 3 ]; then
-  echo "Usage: $0 <client-id> \"<Display Name>\" <redirect-uri> [web-origin]"
-  echo "Example: $0 hrm \"Azul Tech People\" \"http://localhost:5173/api/auth/sso/callback\""
+  echo "Usage: $0 <client-id> \"<Display Name>\" <redirect-uri> [web-origin] [login-theme]"
+  echo "Example: $0 hrm \"Azul Tech People\" \"http://localhost:5173/api/auth/sso/callback\" \"\" \"people\""
   exit 1
 fi
 
@@ -44,6 +48,7 @@ CLIENT_ID="$1"
 CLIENT_NAME="$2"
 REDIRECT_URI="$3"
 WEB_ORIGIN="${4:-}"
+LOGIN_THEME="${5:-}"
 
 # shellcheck disable=SC1091
 set -a; source "$ROOT_DIR/.env"; set +a
@@ -81,6 +86,11 @@ kc update "clients/$CID" -r "$REALM" \
   -s "redirectUris=[\"$REDIRECT_URI\"]" \
   -s "webOrigins=$WEB_ORIGINS_JSON" \
   -s 'attributes."pkce.code.challenge.method"=S256' >/dev/null
+
+if [ -n "$LOGIN_THEME" ]; then
+  echo ">> applying login theme '$LOGIN_THEME' to client '$CLIENT_ID'"
+  kc update "clients/$CID" -r "$REALM" -s "attributes.\"login_theme\"=$LOGIN_THEME" >/dev/null
+fi
 
 # Only mint a secret the first time this client is created — regenerating it
 # on every re-run would silently break whatever app already has the old one
