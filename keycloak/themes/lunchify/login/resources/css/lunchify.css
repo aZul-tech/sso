@@ -1,8 +1,8 @@
 :root {
-  --brand-primary: #f97316;
-  --brand-primary-dark: #c2410c;
-  --brand-primary-soft: rgba(249, 115, 22, 0.18);
-  --brand-card-shadow: rgba(120, 53, 15, 0.2);
+  --brand-primary: #2563eb;
+  --brand-primary-dark: #1d4ed8;
+  --brand-primary-soft: rgba(37, 99, 235, 0.18);
+  --brand-card-shadow: rgba(30, 64, 175, 0.2);
 }
 
 #kc-header { display: none; }
@@ -21,6 +21,7 @@
   height: 80px;
   display: block;
   border-radius: 16px;
+  filter: none;
 }
 
 .card-pf .client-brand-name,
