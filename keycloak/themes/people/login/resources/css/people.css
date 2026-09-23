@@ -36,6 +36,94 @@
   font-size: 0.95rem;
 }
 
+.client-brand-link {
+  color: var(--brand-primary);
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+  transition: color 0.2s ease, text-decoration-color 0.2s ease;
+}
+
+.client-brand-link:hover {
+  color: var(--brand-primary-dark);
+  text-decoration-color: var(--brand-primary-dark);
+}
+
+.app-info-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 26, 63, 0.6);
+  padding: 16px;
+}
+
+.app-info-card {
+  background: #ffffff;
+  border-radius: 12px;
+  border-top: 4px solid var(--brand-primary);
+  box-shadow: 0 24px 60px -12px rgba(3, 10, 30, 0.65);
+  width: 100%;
+  max-width: 380px;
+  padding: 24px 24px 20px;
+  position: relative;
+}
+
+.app-info-close {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  background: none;
+  border: none;
+  font-size: 1.6rem;
+  line-height: 1;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.app-info-close:hover {
+  color: var(--brand-primary-dark);
+}
+
+.app-info-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.app-info-heading {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--brand-primary);
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-top: 6px;
+}
+
+.app-info-row {
+  display: flex;
+  gap: 8px;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.app-info-label {
+  color: #64748b;
+  font-weight: 600;
+  min-width: 105px;
+  flex-shrink: 0;
+}
+
+.app-info-value {
+  color: #1e293b;
+}
+
 .card-pf {
   border-top: 4px solid var(--brand-primary);
   box-shadow: 0 24px 60px -12px var(--brand-card-shadow);
@@ -63,4 +151,42 @@ input[type="email"]:focus,
 #kc-content input:focus {
   border-color: var(--brand-primary);
   box-shadow: 0 0 0 2px var(--brand-primary-soft);
+}
+
+@media (max-width: 767px) {
+  .login-pf-page {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 16px;
+  }
+
+  .login-pf-page .card-pf {
+    width: 100%;
+    max-width: 420px;
+    margin: 0 auto;
+  }
+
+  .login-pf-page .login-pf-body {
+    width: 100%;
+    max-width: 420px;
+    margin: 0 auto;
+  }
+
+  #kc-form,
+  #kc-form-wrapper {
+    width: 100%;
+    margin: 0;
+  }
+
+  .client-brand-name {
+    font-size: 1.6rem;
+  }
+
+  .client-brand-logo {
+    width: 64px;
+    height: 64px;
+  }
 }

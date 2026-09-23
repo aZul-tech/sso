@@ -72,7 +72,7 @@
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0;">
   <tr>
     <td align="center" bgcolor="#1b3b93" style="background-color:#1b3b93; border-radius:8px;">
-      <a href="${href?html}" target="_blank" style="display:inline-block; padding:13px 30px; font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:15px; font-weight:600; color:#ffffff; text-decoration:none; border-radius:8px;">${label}</a>
+      <a href="${href}" target="_blank" style="display:inline-block; padding:13px 30px; font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:15px; font-weight:600; color:#ffffff; text-decoration:none; border-radius:8px;">${label}</a>
     </td>
   </tr>
 </table>
@@ -81,7 +81,7 @@
 <#--  Plain-text link fallback for clients that drop the button.  -->
 <#macro linkFallback href>
 <p style="margin:0 0 6px; font-size:12px; color:#8a93a5;">${msg("azulButtonFallback")}</p>
-<p style="margin:0 0 4px; font-size:12px; line-height:1.5; word-break:break-all;"><a href="${href?html}" target="_blank" style="color:#1b3b93;">${href?html}</a></p>
+<p style="margin:0 0 4px; font-size:12px; line-height:1.5; word-break:break-all;"><a href="${href}" target="_blank" style="color:#1b3b93;">${href}</a></p>
 </#macro>
 
 <#--  Big, spaced one-time code.  -->

@@ -6,7 +6,19 @@
       <div id="kc-form-wrapper">
         <div class="client-branding">
           <img class="client-brand-logo" src="${url.resourcesPath}/img/logo.png" alt="People" />
-          <div class="client-brand-subtitle">Secure access through Azul Tech SSO</div>
+          <div class="client-brand-subtitle">Secure access to <a href="#" class="client-brand-link" onclick="document.getElementById('people-info-modal').style.display='flex';return false;">People</a></div>
+        </div>
+        <div id="people-info-modal" class="app-info-modal">
+          <div class="app-info-card">
+            <button type="button" class="app-info-close" onclick="document.getElementById('people-info-modal').style.display='none';" aria-label="Close">&times;</button>
+            <div class="app-info-heading">Developer Information</div>
+            <div class="app-info-body">
+              <div class="app-info-row"><span class="app-info-label">App name:</span><span class="app-info-value">People</span></div>
+              <div class="app-info-row"><span class="app-info-label">Access:</span><span class="app-info-value">Human Resource management system</span></div>
+              <div class="app-info-row"><span class="app-info-label">Support email:</span><span class="app-info-value">support@azultech.rw</span></div>
+              <div class="app-info-row"><span class="app-info-label">Support:</span><span class="app-info-value">IT Service Desk — Mon-Fri, 9:00 - 17:00 (CAT)</span></div>
+            </div>
+          </div>
         </div>
         <#if realm.password>
           <form id="kc-form-login" onsubmit="login.disabled = true; return true;" action="${url.loginAction}" method="post">
