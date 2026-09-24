@@ -5,7 +5,7 @@
     <div id="kc-form">
       <div id="kc-form-wrapper">
         <div class="client-branding">
-          <img class="client-brand-logo" src="${url.resourcesPath}/img/logo.png" alt="People" />
+          <img class="client-brand-logo" src="${url.resourcesPath}/img/logo.svg" alt="People" />
           <div class="client-brand-subtitle">Secure access to <a href="#" class="client-brand-link" onclick="document.getElementById('people-info-modal').style.display='flex';return false;">People</a></div>
         </div>
         <div id="people-info-modal" class="app-info-modal">
