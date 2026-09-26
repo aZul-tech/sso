@@ -111,3 +111,56 @@ input[type="email"]:focus,
   color: #ffffff;
   text-decoration: underline;
 }
+
+/* --- Phones: center the header + card ----------------------------- */
+/* Stock Keycloak (login.css, max-width: 767px) left-aligns the header, */
+/* stretches the card edge to edge and drops its border/shadow. Undo    */
+/* that so the card floats centered on the navy background.             */
+@media (max-width: 767px) {
+  .login-pf-page {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding: 24px 16px;
+    box-sizing: border-box;
+  }
+
+  #kc-header {
+    width: 100%;
+    padding: 0;
+    text-align: center;
+  }
+
+  #kc-header-wrapper {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    padding: 0 0 20px;
+    color: #ffffff;
+  }
+
+  /* master realm header is the Keycloak logo image — stock pins it left */
+  div.kc-logo-text {
+    margin: 0 auto;
+  }
+
+  .login-pf-page .card-pf {
+    width: 100%;
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 24px 20px;
+    border-top: 4px solid var(--azul-royal);
+    box-shadow: 0 24px 60px -12px rgba(3, 10, 30, 0.65);
+  }
+
+  /* Keep the language switcher inside the card, not pinned to the corner */
+  #kc-locale {
+    position: static;
+    width: auto;
+    text-align: right;
+    margin-bottom: 8px;
+  }
+}
