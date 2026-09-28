@@ -23,7 +23,7 @@
         <#if realm.password>
           <form id="kc-form-login" onsubmit="login.disabled = true; return true;" action="${url.loginAction}" method="post">
             <div class="form-group">
-              <label for="username" class="pf-c-form-label">${msg("username")}</label>
+              <label for="username" class="pf-c-form -label">${msg("username")}</label>
               <input tabindex="1" id="username" class="pf-c-form-control" name="username" value="${(login.username!'')}" type="text" autocomplete="username" />
             </div>
             <div class="form-group">
