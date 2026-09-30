@@ -169,9 +169,13 @@ kc update "clients/$LID" -r "$REALM" \
   -s "rootUrl=$SPA_ORIGIN" -s "baseUrl=$SPA_ORIGIN" \
   -s "redirectUris=[\"$SPA_REDIRECT\"]" \
   -s "webOrigins=[\"$SPA_ORIGIN\"]" \
-  -s "attributes.\"post.logout.redirect.uris\"=$SPA_REDIRECT" \
-  -s 'attributes."pkce.code.challenge.method"=S256' \
-  -s 'attributes."login_theme"=lunchify' >/dev/null
+  -s 'attributes={"post.logout.redirect.uris":"+","pkce.code.challenge.method":"S256","login_theme":"lunchify"}' >/dev/null
+# ^ "+" means "same as Valid Redirect URIs" — a literal URL pattern here
+# (even the same one redirectUris uses) silently fails to persist on this
+# Keycloak version, which breaks logout with "Invalid redirect uri" and
+# gives no error. Also: setting `attributes` as one JSON object is the
+# only form of this update that reliably persists at all — the dotted
+# per-key form (attributes."x"=y) can silently no-op.
 
 echo ">> lunchify client roles (app entitlement tiers live HERE, not as realm roles)"
 for r in super-admin restaurant-manager employee; do
