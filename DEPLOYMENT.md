@@ -41,9 +41,21 @@ ZOHO_CLIENT_ID=<from Zoho API Console>
 ZOHO_CLIENT_SECRET=<from Zoho API Console — ROTATE the one shared earlier>
 ```
 
+> **`KC_HOSTNAME_URL` / `KC_HOSTNAME_ADMIN_URL` are the single most important
+> two lines in this file.** They decide every URL Keycloak hands to a browser —
+> the issuer apps read, the post-login redirect, and the link in each onboarding
+> email. Get them wrong and a deployed app's "Continue with Azul Tech SSO" button
+> sends users to `http://localhost:8081`, a port on *their own machine*.
+>
+> Three guards now stop that from shipping:
+> - `.env.example` no longer contains a localhost value to copy by accident.
+> - `docker-compose.prod.yml` **aborts** `up -d` if either variable is missing.
+> - `preflight-prod-env.sh` also rejects loopback and plain-http values.
+
 Build the domain-guard provider, then start in production mode:
 ```bash
 ./keycloak/scripts/build-providers.sh          # creates providers/azul-domain-guard.jar
+./keycloak/scripts/preflight-prod-env.sh       # must pass before starting
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
@@ -89,11 +101,20 @@ company admin. She logs in, then assigns every other role (more admins, the
 kitchen manager) from **Admin → Team**. The setting only ever promotes, never
 demotes; you can blank it once she has logged in.
 
-Build (the SSO URL is baked into the web bundle) and start:
+Build the SSO URL is baked into the web bundle and start:
 ```bash
 VITE_KEYCLOAK_URL=https://sso.azultech.rw \
 docker compose up -d --build
 ```
+
+> ⚠️ **The single most common cause of the SSO button going to localhost.**
+> `VITE_KEYCLOAK_URL` is baked into the web bundle **at build time** — it is not
+> read at runtime, so a running container keeps the value it was built with.
+> Build it without the variable (or with the dev default from
+> `docs/lunchify-integration.md`) and the button navigates to
+> `http://localhost:8081` forever, no matter how correct the SSO repo's `.env`
+> is. There is no way to patch this at runtime — **rebuild the web image** with
+> the public URL set.
 
 Data persists in the `lunchify_data` volume (`docker volume inspect lunch-app_lunchify_data`).
 
@@ -113,6 +134,27 @@ nginx -t && systemctl reload nginx
 ## 4. Smoke test
 
 ```bash
+./keycloak/scripts/verify-endpoints.sh
+```
+
+That asserts the **live** issuer over the public URL. It catches the class of bug
+where `.env` is right but the running container still advertises localhost:
+
+```
+   issuer: https://sso.azultech.rw/realms/azul-tech
+ok: live issuer matches the configured hostname
+VERIFY PASSED — Keycloak is advertising its public https URL.
+```
+
+It reads `.env`, so running it locally is harmless — a dev box reports a
+`localhost` issuer and passes. Pass the URL explicitly to pin it:
+
+```bash
+./keycloak/scripts/verify-endpoints.sh https://sso.azultech.rw
+```
+
+Manual equivalent:
+```bash
 curl -s https://sso.azultech.rw/realms/azul-tech/.well-known/openid-configuration | grep issuer
 #  -> "issuer":"https://sso.azultech.rw/realms/azul-tech"
 curl -s https://lunchify.azultech.rw/api/health
@@ -121,6 +163,10 @@ curl -s https://lunchify.azultech.rw/api/health
 Then in a browser: `https://lunchify.azultech.rw` → **Continue with Azul Tech SSO** →
 sign in with a real `@azultech.rw` Zoho account → lands in Lunchify. The
 `BOOTSTRAP_ADMIN_EMAILS` account becomes SUPER_ADMIN; everyone else is EMPLOYEE.
+
+If that button lands on `localhost:8081`, the issuer is fine but the **web bundle
+was built without `VITE_KEYCLOAK_URL`** — rebuild it (section 2). If the *Keycloak
+login page itself* is unreachable, run `verify-endpoints.sh` and fix `.env`.
 
 ---
 

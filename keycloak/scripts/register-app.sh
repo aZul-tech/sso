@@ -16,6 +16,14 @@
 # Usage:
 #   ./keycloak/scripts/register-app.sh <client-id> "<Display Name>" <redirect-uri> [web-origin] [login-theme]
 #
+# Environment:
+#   KEYCLOAK_URL=<public https URL>  Overrides the issuer the printed URLs are
+#                                    built from. Pass this for a real deployment
+#                                    (docs/HANDOFF-TO-IT.md); the script refuses
+#                                    a loopback value so a dev URL can't be baked
+#                                    into a deployed app. Omit it for local dev
+#                                    and KC_HOSTNAME_URL from .env is used.
+#
 # Example (a server-rendered app doing the Authorization Code exchange
 # itself — no browser-side calls to Keycloak, so no web-origin needed):
 #   ./keycloak/scripts/register-app.sh hrm "Azul Tech People" \
@@ -25,6 +33,11 @@
 # browser, like lunchify — needs its origin in webOrigins for CORS):
 #   ./keycloak/scripts/register-app.sh some-spa "Some SPA" \
 #     "http://localhost:5174/*" "http://localhost:5174" "lunchify"
+#
+# Example (production — note KEYCLOAK_URL, which is what makes the printed
+# URLs usable by an app deployed on another host):
+#   KEYCLOAK_URL=https://sso.azultech.rw ./keycloak/scripts/register-app.sh \
+#     hrm "Azul Tech People" "https://hrm.azultech.rw/*" "" "people"
 #
 # Keycloak supports a native per-client login theme via the client attribute
 # `login_theme`. This is how the shared Azul Tech SSO can keep one realm while
@@ -49,6 +62,33 @@ CLIENT_NAME="$2"
 REDIRECT_URI="$3"
 WEB_ORIGIN="${4:-}"
 LOGIN_THEME="${5:-}"
+
+# Validate an explicitly-requested KEYCLOAK_URL up front, before anything is
+# changed in the realm. The URLs printed at the end are what the app bakes into
+# itself; a loopback one is the most common cause of a deployed app's
+# "Continue with SSO" button bouncing users to a port on their own machine. We
+# refuse rather than print something that works on this machine and nowhere
+# else. An implicit .env value is deliberately NOT checked here — a loopback
+# issuer is correct for local dev.
+if [ -n "${KEYCLOAK_URL:-}" ]; then
+  case "$KEYCLOAK_URL" in
+    https://*)
+      case "$KEYCLOAK_URL" in
+        *://localhost*|*://127.*|*://0.0.0.0*|*://\[::1\]*)
+          echo "!! KEYCLOAK_URL='$KEYCLOAK_URL' is a loopback address." >&2
+          echo "!! Baked into the app it would send users to a port on their" >&2
+          echo "!! own machine. Pass the public https URL instead." >&2
+          exit 1
+          ;;
+      esac
+      ;;
+    *)
+      echo "!! KEYCLOAK_URL='$KEYCLOAK_URL' is not an https:// URL." >&2
+      echo "!! Pass the public URL, e.g. https://sso.azultech.rw" >&2
+      exit 1
+      ;;
+  esac
+fi
 
 # shellcheck disable=SC1091
 set -a; source "$ROOT_DIR/.env"; set +a
@@ -101,7 +141,15 @@ if [ "$JUST_CREATED" = "1" ]; then
 fi
 SECRET=$(kc get "clients/$CID/client-secret" -r "$REALM" --fields value --format csv --noquotes)
 
-PUBLIC_URL="${KC_HOSTNAME_URL:-http://localhost:${KC_HTTP_PORT:-8081}}"
+# Which public URL to print below. An explicit KEYCLOAK_URL wins (validated at
+# the top of this script); otherwise fall back to the realm's own hostname.
+PUBLIC_URL="${KEYCLOAK_URL:-${KC_HOSTNAME_URL:-}}"
+
+if [ -z "$PUBLIC_URL" ]; then
+  echo "!! KC_HOSTNAME_URL is unset in .env and no KEYCLOAK_URL was given." >&2
+  echo "!! Set one, or pass KEYCLOAK_URL=https://sso.azultech.rw" >&2
+  exit 1
+fi
 
 echo ""
 echo "========================================"

@@ -71,7 +71,6 @@ KC_REALM=azultech
 KC_HOSTNAME_URL=https://sso.azultech.rw
 KC_HOSTNAME_ADMIN_URL=https://sso.azultech.rw
 KC_HOSTNAME_STRICT=true
-KC_HOSTNAME_STRICT_HTTPS=true
 SMTP_HOST=smtp.zoho.com                       # Zoho Mail — verified working
 SMTP_PORT=587
 SMTP_FROM=support@azultech.rw
@@ -87,8 +86,34 @@ PLATFORM_ADMIN_EMAILS=<comma-separated named platform-admin accounts>
 Start in production mode:
 
 ```bash
+./keycloak/scripts/preflight-prod-env.sh   # must pass — see the warning below
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
+
+> ⚠️ **Do not skip `preflight-prod-env.sh`, and do not hand-edit
+> `docker-compose.prod.yml` to get past a failure.** These two lines decide every
+> URL Keycloak hands to a browser:
+>
+> ```
+> KC_HOSTNAME_URL=https://sso.azultech.rw
+> KC_HOSTNAME_ADMIN_URL=https://sso.azultech.rw
+> ```
+>
+> They are the issuer that every app reads out of the OIDC discovery document,
+> the post-login redirect, and the one-time link in every onboarding email. If
+> they are wrong, a deployed app's "Continue with Azul Tech SSO" button redirects
+> users to `http://localhost:8081` — a port on *their own laptop*, which has
+> nothing listening on it. That has happened here before; that is what these
+> guards exist to prevent.
+>
+> - `.env` is git-ignored, so a freshly cloned server has none at all.
+> - `docker-compose.yml` deliberately defaults the hostname to `http://localhost:8081`
+>   so that local dev works with no `.env` at all. `docker-compose.prod.yml`
+>   overrides that with `${VAR:?}`, which **aborts** the deploy when the value is
+>   missing — so prod can no longer silently inherit the dev default.
+> - `preflight-prod-env.sh` catches what `:?` cannot: a *present but wrong* value
+>   (loopback host, plain `http://`, `KC_HOSTNAME_STRICT=false`, or a leftover
+>   `SMTP_HOST=mailhog` that would swallow every onboarding email).
 
 Wait for health, then apply the realm configuration (creates the realm on a
 fresh DB, idempotent so it's safe to re-run):
@@ -143,15 +168,45 @@ pattern if you script anything else that emails a Keycloak link.
 ## Smoke test
 
 ```bash
+./keycloak/scripts/verify-endpoints.sh
+```
+
+This checks the **running** service over its public URL, not just what `.env` says:
+
+```
+   issuer: https://sso.azultech.rw/realms/azultech
+ok: live issuer matches the configured hostname
+VERIFY PASSED — Keycloak is advertising its public https URL.
+```
+
+It reads `.env`, so it is safe to run locally too — a dev box reports a
+`localhost` issuer and passes, which only proves that instance is
+self-consistent. Pass the URL explicitly to check a specific one:
+
+```bash
+./keycloak/scripts/verify-endpoints.sh                        # whatever .env says
+./keycloak/scripts/verify-endpoints.sh https://sso.azultech.rw
+```
+
+Manual equivalent:
+```bash
 curl -s https://sso.azultech.rw/realms/azultech/.well-known/openid-configuration | grep -o '"issuer":"[^"]*"'
 # -> "issuer":"https://sso.azultech.rw/realms/azultech"
 ```
+
+Run it again after **every** redeploy — that is the cheap check that catches a
+localhost issuer before a user does.
 
 Then in a browser: open Lunchify → **Continue with Azul Tech SSO** → land on
 Keycloak's own branded login page (not a Zoho redirect) → sign in as a
 provisioned test user → complete the onboarding required actions (password,
 TOTP, recovery codes) on first login → land back in Lunchify on the correct
 role-based dashboard.
+
+If that button goes to `localhost:8081` while this script passes, the fault is
+**not** in this repo. `VITE_KEYCLOAK_URL` is baked into Lunchify's web bundle at
+**build time** and is never read at runtime, so the web image has to be rebuilt
+with the public URL (see `DEPLOYMENT.md` §2). No change here can correct it.
 
 Admin console: `https://sso.azultech.rw/admin/` (`admin` /
 `KEYCLOAK_ADMIN_PASSWORD`).

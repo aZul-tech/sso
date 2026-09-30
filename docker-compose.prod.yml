@@ -21,6 +21,23 @@ services:
       KC_PROXY_HEADERS: xforwarded
       KC_HOSTNAME_STRICT: "true"
       KC_HTTP_ENABLED: "true"
+
+      # MUST be set, and MUST be the public https URL.
+      #
+      # docker-compose.yml gives these a `:-http://localhost:8081` fallback so
+      # that `docker compose up -d` works on a laptop with no .env at all. In
+      # production that silent fallback is the dangerous one: `.env` is
+      # git-ignored, so a server that was cloned but never configured falls
+      # straight through to localhost and Keycloak bakes
+      # http://localhost:8081 into its issuer and every URL it mints. Users
+      # then get bounced to a port on their own machine after login.
+      #
+      # `${VAR:?message}` makes Compose ABORT with `message` when the variable
+      # is unset or empty, so a misconfigured prod deploy fails at `up -d`
+      # instead of coming up silently wrong. The value must also not be a
+      # localhost/loopback address — preflight-prod-env.sh checks that.
+      KC_HOSTNAME: ${KC_HOSTNAME_URL:?KC_HOSTNAME_URL is required for production - set it to the public https URL (e.g. https://sso.azultech.rw) in .env}
+      KC_HOSTNAME_ADMIN: ${KC_HOSTNAME_ADMIN_URL:?KC_HOSTNAME_ADMIN_URL is required for production - set it to the public https URL (e.g. https://sso.azultech.rw) in .env}
     # `ports:` lists are CONCATENATED (not replaced) across compose -f files,
     # so without !override this would additionally publish 0.0.0.0:8081 from
     # docker-compose.yml's default alongside this one, and the container would
